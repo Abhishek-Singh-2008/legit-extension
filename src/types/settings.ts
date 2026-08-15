@@ -7,7 +7,7 @@ export interface ExtensionSettings {
   githubAvatarUrl?: string;
 
   // Repository config
-  repository?: string; // e.g. "abhishek/leetcode-solutions"
+  repository?: string; // e.g. "Abhishek-Singh-2008/leetcode-solutions-test"
   branch: string; // e.g. "main"
   baseDirectory: string; // e.g. "algorithms"
   folderFormat: FolderFormat;

@@ -121,7 +121,15 @@ body {
 .account {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+}
+
+.account__avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid var(--color-accent);
+  display: block;
 }
 
 .account__check {
@@ -218,10 +226,18 @@ body {
   font-size: 13px;
 }
 
+.last-sync__icon--success {
+  color: var(--color-success);
+}
+
+.last-sync__icon--error {
+  color: var(--color-danger);
+}
+
 .last-sync__info {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
 }
 
 .last-sync__title {
@@ -233,6 +249,23 @@ body {
 .last-sync__time {
   font-size: 11px;
   color: var(--color-text-muted);
+}
+
+.last-sync__error {
+  font-size: 11px;
+  color: var(--color-danger);
+}
+
+.last-sync__link {
+  font-size: 11px;
+  color: #58a6ff;
+  text-decoration: none;
+  margin-top: 2px;
+  display: inline-block;
+}
+
+.last-sync__link:hover {
+  text-decoration: underline;
 }
 
 /* ── Buttons ──────────────────────────────────────────────────────────────── */
@@ -313,6 +346,47 @@ body {
 /* ── Utilities ────────────────────────────────────────────────────────────── */
 .hidden {
   display: none !important;
+}
+
+/* ── Toast Notifications ─────────────────────────────────────────────────── */
+.toast {
+  position: fixed;
+  bottom: 48px;
+  left: 16px;
+  right: 16px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--color-text);
+  text-align: center;
+  z-index: 999;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  animation: fadeIn 0.2s ease;
+}
+
+.toast--success {
+  border-color: rgba(63, 185, 80, 0.4);
+  background: #112518;
+  color: #3fb950;
+}
+
+.toast--error {
+  border-color: rgba(218, 54, 51, 0.4);
+  background: #271415;
+  color: #f85149;
+}
+
+.toast--info {
+  border-color: rgba(31, 111, 235, 0.4);
+  background: #0d1d36;
+  color: #58a6ff;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 /* ── Problem Card (Phase 2) ───────────────────────────────────────────────── */

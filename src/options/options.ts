@@ -73,7 +73,7 @@ function renderAccount(status: ConnectionStatus): void {
       avatarEl.src = status.avatarUrl;
       avatarEl.alt = status.username;
     }
-    $("account-repo").textContent = "Abhishek-Singh-2008/leetcode-solutions";
+    $("account-repo").textContent = "Abhishek-Singh-2008/leetcode-solutions-test";
   }
 }
 

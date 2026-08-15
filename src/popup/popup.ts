@@ -1,15 +1,20 @@
-// ─── Popup Script ─────────────────────────────────────────────────────────────
+// ─── Popup Script — Phase 7 UI Polish ────────────────────────────────────────
+// Uses GET_CONNECTION_STATUS (not GET_SETTINGS) for auth display so the token
+// is never accessible in the popup context.
 
 import { logger } from "@/utils/logger";
-import type { ExtensionSettings } from "@/types/settings";
+import type { ExtensionSettings, LastSyncRecord } from "@/types/settings";
 import type { LeetCodeProblem } from "@/types/leetcode";
+import type { ConnectionStatus } from "@/storage/storage";
 
-// ── DOM helpers ────────────────────────────────────────────────────────────────
+// ── DOM Helpers ───────────────────────────────────────────────────────────────
 
-function $<T extends Element>(selector: string): T {
-  const el = document.querySelector<T>(selector);
-  if (!el) throw new Error(`Element not found: ${selector}`);
-  return el;
+function $<T extends Element>(selector: string): T | null {
+  return document.querySelector<T>(selector);
+}
+
+function $id<T extends HTMLElement>(id: string): T | null {
+  return document.getElementById(id) as T | null;
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
@@ -22,76 +27,91 @@ document.addEventListener("DOMContentLoaded", () => {
 
 function initVersion(): void {
   const manifest = chrome.runtime.getManifest();
-  const el = document.getElementById("version-label");
+  const el = $id("version-label");
   if (el) el.textContent = `v${manifest.version}`;
 }
 
 async function loadAndRender(): Promise<void> {
   try {
-    // Load settings and current problem in parallel
-    const [settingsRes, problemRes] = await Promise.all([
+    const [connRes, settingsRes, problemRes] = await Promise.all([
+      chrome.runtime.sendMessage({ type: "GET_CONNECTION_STATUS" }),
       chrome.runtime.sendMessage({ type: "GET_SETTINGS" }),
       chrome.runtime.sendMessage({ type: "GET_CURRENT_PROBLEM" }),
     ]);
 
-    if (settingsRes?.ok) {
-      render(settingsRes.data as Partial<ExtensionSettings>);
+    if (connRes?.ok) {
+      renderConnection(connRes.data as ConnectionStatus);
     }
-
+    if (settingsRes?.ok) {
+      renderSettings(settingsRes.data as Partial<ExtensionSettings>);
+    }
     if (problemRes?.ok) {
       renderProblem(problemRes.data as LeetCodeProblem | null);
     }
   } catch (err) {
-    logger.error("Failed to load data in popup:", err);
+    logger.error("Failed to load popup data:", err);
   }
 }
 
-function render(s: Partial<ExtensionSettings>): void {
-  const isConnected = Boolean(s.githubUsername);
+// ── Renderers ─────────────────────────────────────────────────────────────────
 
-  // Badge
-  const badge = $<HTMLElement>("#status-badge");
-  badge.textContent = isConnected ? "Connected" : "Not connected";
-  badge.className = `badge badge--${isConnected ? "connected" : "disconnected"}`;
+function renderConnection(status: ConnectionStatus): void {
+  const badge = $id("status-badge");
+  const accountConnected = $id("account-connected");
+  const accountDisconnected = $id("account-disconnected");
+  const usernameEl = $id("github-username");
+  const avatarEl = $<HTMLImageElement>("#account-avatar");
 
-  // Account section
-  const accountConnected = $<HTMLElement>("#account-connected");
-  const accountDisconnected = $<HTMLElement>("#account-disconnected");
-  const usernameEl = $<HTMLElement>("#github-username");
+  const isConnected = status.connected && Boolean(status.username);
 
-  if (isConnected && s.githubUsername) {
-    accountConnected.classList.remove("hidden");
-    accountDisconnected.classList.add("hidden");
-    usernameEl.textContent = `@${s.githubUsername}`;
-  } else {
-    accountConnected.classList.add("hidden");
-    accountDisconnected.classList.remove("hidden");
+  // Header badge
+  if (badge) {
+    badge.textContent = isConnected ? "Connected" : "Not connected";
+    badge.className = `badge badge--${isConnected ? "connected" : "disconnected"}`;
   }
 
-  // Repository
-  const repoDisplay = $<HTMLElement>("#repo-display");
-  repoDisplay.textContent = s.repository ?? "—";
+  if (isConnected && status.username) {
+    accountConnected?.classList.remove("hidden");
+    accountDisconnected?.classList.add("hidden");
+    if (usernameEl) usernameEl.textContent = `@${status.username}`;
+    if (avatarEl && status.avatarUrl) {
+      avatarEl.src = status.avatarUrl;
+      avatarEl.alt = status.username;
+    }
+  } else {
+    accountConnected?.classList.add("hidden");
+    accountDisconnected?.classList.remove("hidden");
+  }
+}
+
+function renderSettings(s: Partial<ExtensionSettings>): void {
+  // Repository — show configured repo or the hardcoded target
+  const repoDisplay = $id("repo-display");
+  if (repoDisplay) {
+    repoDisplay.textContent =
+      s.repository ?? "Abhishek-Singh-2008/leetcode-solutions-test";
+  }
 
   // Branch
-  const branchDisplay = $<HTMLElement>("#branch-display");
-  branchDisplay.textContent = s.branch ?? "main";
+  const branchDisplay = $id("branch-display");
+  if (branchDisplay) branchDisplay.textContent = s.branch ?? "main";
 
   // Auto sync toggle
-  const autoSyncToggle = $<HTMLInputElement>("#auto-sync-toggle");
-  autoSyncToggle.checked = s.autoSync ?? true;
+  const autoSyncToggle = $id<HTMLInputElement>("auto-sync-toggle");
+  if (autoSyncToggle) autoSyncToggle.checked = s.autoSync ?? true;
 
   // Last sync
-  renderLastSync(s);
+  renderLastSync(s.lastSync);
 }
 
 function renderProblem(problem: LeetCodeProblem | null): void {
-  const detected = document.getElementById("problem-detected");
-  const none = document.getElementById("problem-none");
-  const titleEl = document.getElementById("problem-title");
-  const slugEl = document.getElementById("problem-slug");
-  const badgeEl = document.getElementById("problem-difficulty");
+  const detected = $id("problem-detected");
+  const none = $id("problem-none");
+  const titleEl = $id("problem-title");
+  const slugEl = $id("problem-slug");
+  const badgeEl = $id("problem-difficulty");
 
-  if (!detected || !none || !titleEl || !slugEl || !badgeEl) return;
+  if (!detected || !none) return;
 
   if (!problem) {
     detected.classList.add("hidden");
@@ -102,18 +122,17 @@ function renderProblem(problem: LeetCodeProblem | null): void {
   detected.classList.remove("hidden");
   none.classList.add("hidden");
 
-  titleEl.textContent = problem.title;
-  slugEl.textContent = problem.slug;
-
-  // Difficulty badge
-  const diff = problem.difficulty.toLowerCase();
-  badgeEl.textContent = problem.difficulty;
-  badgeEl.className = `problem__badge problem__badge--${diff}`;
+  if (titleEl) titleEl.textContent = problem.title;
+  if (slugEl) slugEl.textContent = problem.slug;
+  if (badgeEl) {
+    badgeEl.textContent = problem.difficulty;
+    badgeEl.className = `problem__badge problem__badge--${problem.difficulty.toLowerCase()}`;
+  }
 }
 
-function renderLastSync(s: Partial<ExtensionSettings>): void {
-  const container = $<HTMLElement>("#last-sync-content");
-  const ls = s.lastSync;
+function renderLastSync(ls: LastSyncRecord | undefined): void {
+  const container = $id("last-sync-content");
+  if (!container) return;
 
   if (!ls) {
     container.innerHTML = `<span class="last-sync__empty">No syncs yet</span>`;
@@ -122,63 +141,83 @@ function renderLastSync(s: Partial<ExtensionSettings>): void {
 
   const when = timeAgo(new Date(ls.timestamp));
   const icon = ls.success ? "✓" : "✗";
-  const iconColor = ls.success ? "color: var(--color-success)" : "color: var(--color-danger)";
+  const iconClass = ls.success ? "last-sync__icon--success" : "last-sync__icon--error";
+
+  const linkHtml = ls.commitUrl
+    ? `<a href="${escapeHtml(ls.commitUrl)}" class="last-sync__link" id="commit-link"
+         target="_blank" rel="noopener noreferrer">View commit ↗</a>`
+    : "";
 
   container.innerHTML = `
     <div class="last-sync__item">
-      <span class="last-sync__icon" style="${iconColor}">${icon}</span>
+      <span class="last-sync__icon ${iconClass}">${icon}</span>
       <div class="last-sync__info">
         <span class="last-sync__title">${escapeHtml(ls.title)}</span>
         <span class="last-sync__time">${when}</span>
+        ${ls.errorMessage ? `<span class="last-sync__error">${escapeHtml(ls.errorMessage)}</span>` : ""}
+        ${linkHtml}
       </div>
     </div>
   `;
+
+  // External link must open via chrome.tabs.create (popup context blocks target=_blank)
+  const commitLink = $id("commit-link");
+  if (commitLink && ls.commitUrl) {
+    commitLink.addEventListener("click", (e) => {
+      e.preventDefault();
+      chrome.tabs.create({ url: ls.commitUrl! });
+    });
+  }
 }
 
 // ── Events ────────────────────────────────────────────────────────────────────
 
 function bindEvents(): void {
-  // Connect GitHub
-  document.getElementById("connect-btn")?.addEventListener("click", () => {
-    // TODO Phase 5
-    showToast("GitHub auth coming in Phase 5!", "info");
+  // Connect GitHub → redirect to Options page (auth is done there)
+  $id("connect-btn")?.addEventListener("click", () => {
+    chrome.runtime.openOptionsPage();
   });
 
   // Auto sync toggle
-  document
-    .getElementById("auto-sync-toggle")
-    ?.addEventListener("change", async (e) => {
-      const checked = (e.target as HTMLInputElement).checked;
-      await chrome.runtime.sendMessage({
-        type: "SAVE_SETTINGS",
-        settings: { autoSync: checked },
-      });
-      logger.debug(`Auto sync set to: ${checked}`);
+  $id("auto-sync-toggle")?.addEventListener("change", async (e) => {
+    const checked = (e.target as HTMLInputElement).checked;
+    await chrome.runtime.sendMessage({
+      type: "SAVE_SETTINGS",
+      settings: { autoSync: checked },
     });
+    logger.debug(`Auto sync set to: ${checked}`);
+  });
 
-  // Test connection
-  document.getElementById("test-btn")?.addEventListener("click", async () => {
-    const btn = $<HTMLButtonElement>("#test-btn");
+  // Test GitHub connection — actually tests stored token against GET /user
+  $id("test-btn")?.addEventListener("click", async () => {
+    const btn = $id<HTMLButtonElement>("test-btn");
+    if (!btn) return;
     btn.disabled = true;
     btn.textContent = "Testing…";
 
     try {
-      const response = await chrome.runtime.sendMessage({ type: "PING" });
-      if (response?.ok) {
-        showToast("✓ Background worker is alive", "success");
+      const connRes = await chrome.runtime.sendMessage({ type: "GET_CONNECTION_STATUS" });
+      if (!connRes?.ok || !connRes.data?.connected) {
+        showToast("Not connected — open Settings to connect GitHub", "error");
+        return;
+      }
+      // PING the worker as a health check
+      const pingRes = await chrome.runtime.sendMessage({ type: "PING" });
+      if (pingRes?.ok) {
+        showToast(`✓ Connected as @${connRes.data.username ?? "—"}`, "success");
       } else {
         showToast("Background worker error", "error");
       }
     } catch {
-      showToast("Could not reach background", "error");
+      showToast("Could not reach background worker", "error");
     } finally {
       btn.disabled = false;
-      btn.textContent = "Test GitHub Connection";
+      btn.textContent = "Test Connection";
     }
   });
 
   // Open settings
-  document.getElementById("settings-btn")?.addEventListener("click", () => {
+  $id("settings-btn")?.addEventListener("click", () => {
     chrome.runtime.openOptionsPage();
   });
 }
@@ -188,28 +227,26 @@ function bindEvents(): void {
 function timeAgo(date: Date): string {
   const diff = Math.floor((Date.now() - date.getTime()) / 1000);
   if (diff < 60) return "just now";
-  if (diff < 3600) return `${Math.floor(diff / 60)} minutes ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)} hours ago`;
-  return `${Math.floor(diff / 86400)} days ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
 }
 
 function escapeHtml(str: string): string {
-  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
-function showToast(message: string, _type: "success" | "error" | "info"): void {
+function showToast(message: string, type: "success" | "error" | "info"): void {
   const existing = document.querySelector(".toast");
   if (existing) existing.remove();
 
   const toast = document.createElement("div");
-  toast.className = "toast";
-  toast.style.cssText = `
-    position: fixed; bottom: 48px; left: 16px; right: 16px;
-    background: var(--color-surface-2); border: 1px solid var(--color-border);
-    border-radius: 6px; padding: 8px 12px; font-size: 12px;
-    color: var(--color-text); text-align: center; z-index: 999;
-  `;
+  toast.className = `toast toast--${type}`;
   toast.textContent = message;
   document.body.appendChild(toast);
-  setTimeout(() => toast.remove(), 2500);
+  setTimeout(() => toast.remove(), 2800);
 }

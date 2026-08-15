@@ -1,6 +1,6 @@
 // ─── Background Service Worker ───────────────────────────────────────────────
-// Central coordinator: receives messages from the content script, then drives
-// GitHub authentication and file push (Phase 5: auth implemented).
+// Central coordinator: receives messages from content script, drives
+// GitHub authentication (Phase 5) and file push (Phase 6).
 
 import { logger } from "@/utils/logger";
 import {
@@ -11,8 +11,15 @@ import {
   saveAuthCredentials,
   clearAuthCredentials,
   loadConnectionStatus,
+  loadAuthToken,
+  recordSubmissionHash,
+  isSubmissionDuplicate,
+  updateLastSync,
 } from "@/storage/storage";
 import { verifyAndConnect, GitHubAuthError } from "@/github/github-auth";
+import { pushSubmissionToGitHub } from "@/github/github-push";
+import { sha256 } from "@/utils/hash";
+import { getErrorMessage } from "@/utils/errors";
 import type { LeetCodeProblem } from "@/types/leetcode";
 
 // ── Message Types ─────────────────────────────────────────────────────────────
@@ -50,8 +57,7 @@ chrome.runtime.onMessage.addListener(
         });
       });
 
-    // Return true to keep the message channel open for the async response
-    return true;
+    return true; // keep channel open for async response
   }
 );
 
@@ -69,9 +75,7 @@ async function handleMessage(
       const { problem } = message;
       await saveCurrentProblem(problem);
       if (problem) {
-        logger.info(
-          `Problem stored: ${problem.title} (${problem.difficulty}) — ${problem.slug}`
-        );
+        logger.info(`Problem stored: ${problem.title} (${problem.difficulty}) — ${problem.slug}`);
       } else {
         logger.info("Problem cleared (left problem page).");
       }
@@ -87,19 +91,18 @@ async function handleMessage(
 
     case "GET_SETTINGS": {
       const settings = await loadSettings();
-      // Strip the token before sending — token must NEVER leave the service worker
+      // Strip token — must never leave the service worker
       const { githubToken: _token, ...safe } = settings;
       return { ok: true, data: safe };
     }
 
     case "GET_CONNECTION_STATUS": {
-      // Returns sanitized status: connected flag, username, avatarUrl — NO token
       const status = await loadConnectionStatus();
       return { ok: true, data: status };
     }
 
     case "SAVE_SETTINGS": {
-      // Prevent callers from sneaking a token through SAVE_SETTINGS
+      // Strip any token field — token only saved via CONNECT_GITHUB
       const { githubToken: _stripped, ...safeSettings } = message.settings as {
         githubToken?: string;
         [key: string]: unknown;
@@ -121,24 +124,19 @@ async function handleMessage(
 
       let account;
       try {
-        // Verify token against GitHub API — token never logged
         account = await verifyAndConnect(token);
       } catch (err) {
         if (err instanceof GitHubAuthError) {
           logger.warn(`[Auth] Verification failed: ${err.code}`);
-          // Return descriptive error — token NOT included
           return { ok: false, error: err.message };
         }
         logger.error("[Auth] Unexpected error during verification.");
         return { ok: false, error: "An unexpected error occurred during verification." };
       }
 
-      // Save ONLY after successful verification
       await saveAuthCredentials(token, account.login, account.avatarUrl);
-
       logger.info(`[Auth] Connected: @${account.login} → ${account.repoFullName}`);
 
-      // Return sanitized account info — token NOT included
       return {
         ok: true,
         data: {
@@ -157,18 +155,81 @@ async function handleMessage(
       return { ok: true };
     }
 
-    // ── Phase 7 stub ─────────────────────────────────────────────────────────
+    // ── Phase 6: GitHub Push ──────────────────────────────────────────────────
 
     case "SUBMISSION_ACCEPTED": {
       const { submission } = message;
-      logger.info(
-        `SUBMISSION_ACCEPTED: ${submission.title} (${submission.language})`
-      );
-      // TODO Phase 7: invoke GitHub push pipeline here
+      logger.info(`[Push] SUBMISSION_ACCEPTED: ${submission.title} (${submission.language})`);
+
+      // ── 1. Load settings ────────────────────────────────────────────────────
+      const settings = await loadSettings();
+
+      // ── 2. Guard: token present ─────────────────────────────────────────────
+      const token = await loadAuthToken();
+      if (!token) {
+        logger.warn("[Push] No GitHub token stored — skipping push. Connect in Options.");
+        showNotification(
+          "GitHub not connected",
+          `✓ ${submission.title} solved — connect GitHub in Options to sync.`
+        );
+        return { ok: true };
+      }
+
+      // ── 3. Guard: autoSync enabled ──────────────────────────────────────────
+      if (!settings.autoSync) {
+        logger.info("[Push] autoSync is disabled — skipping push.");
+        return { ok: true };
+      }
+
+      // ── 4. Deduplication ────────────────────────────────────────────────────
+      const hash = await sha256(`${submission.slug}:${submission.language}:${submission.code}`);
+      const isDuplicate = await isSubmissionDuplicate(hash);
+      if (isDuplicate) {
+        logger.info(`[Push] Duplicate submission detected (${submission.slug}) — skipping.`);
+        return { ok: true };
+      }
+
+      // ── 5. Push to GitHub ───────────────────────────────────────────────────
+      logger.info(`[Push] Pushing ${submission.slug} to GitHub...`);
+      let pushResult;
+      try {
+        pushResult = await pushSubmissionToGitHub(submission, token, settings);
+      } catch (err) {
+        const msg = getErrorMessage(err);
+        logger.error("[Push] Push failed:", msg);
+        showNotification(
+          "Sync failed ✗",
+          `${submission.title} — ${msg}`
+        );
+        await updateLastSync({
+          title: submission.title,
+          slug: submission.slug,
+          timestamp: new Date().toISOString(),
+          success: false,
+          errorMessage: msg,
+        });
+        return { ok: false, error: msg };
+      }
+
+      // ── 6. Record deduplication hash ────────────────────────────────────────
+      await recordSubmissionHash(hash);
+
+      // ── 7. Update last sync record ──────────────────────────────────────────
+      await updateLastSync({
+        title: submission.title,
+        slug: submission.slug,
+        timestamp: new Date().toISOString(),
+        commitUrl: pushResult.commitUrl,
+        success: true,
+      });
+
+      // ── 8. Success notification ──────────────────────────────────────────────
+      logger.info(`[Push] ✓ Committed: ${pushResult.commitUrl}`);
       showNotification(
-        "Submission detected (sync disabled)",
-        `✓ ${submission.title} — GitHub sync coming in Phase 7`
+        "Synced to GitHub ✓",
+        `${submission.title} (${submission.language}) → ${pushResult.solutionPath}`
       );
+
       return { ok: true };
     }
 
@@ -195,7 +256,6 @@ function showNotification(title: string, message: string): void {
 chrome.runtime.onInstalled.addListener(({ reason }) => {
   logger.info(`Extension installed/updated. Reason: ${reason}`);
   if (reason === chrome.runtime.OnInstalledReason.INSTALL) {
-    // Open options page on first install so the user can configure it
     chrome.tabs.create({ url: chrome.runtime.getURL("options/options.html") });
   }
 });

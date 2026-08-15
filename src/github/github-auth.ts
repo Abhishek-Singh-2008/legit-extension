@@ -9,7 +9,7 @@
 //
 // Expected PAT configuration:
 //   Resource owner : Abhishek-Singh-2008
-//   Repository     : leetcode-solutions (only selected)
+//   Repository     : leetcode-solutions-test (only selected)
 //   Permission     : Contents → Read and write
 
 import type { GitHubUser, GitHubRepository } from "@/types/github";
@@ -43,7 +43,7 @@ export class GitHubAuthError extends Error {
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const GITHUB_API = "https://api.github.com";
-const EXPECTED_REPO_FULL_NAME = "Abhishek-Singh-2008/leetcode-solutions";
+const EXPECTED_REPO_FULL_NAME = "Abhishek-Singh-2008/leetcode-solutions-test";
 
 // ── Core Verification ─────────────────────────────────────────────────────────
 
