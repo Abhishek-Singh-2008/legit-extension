@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LeetCode GitHub Sync</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div class="popup">
+      <!-- Header -->
+      <header class="header">
+        <div class="header__logo">
+          <img src="../icons/icon32.png" alt="LCSync" class="header__icon" />
+          <span class="header__title">LeetCode GitHub Sync</span>
+        </div>
+        <span id="status-badge" class="badge badge--disconnected">Not connected</span>
+      </header>
+
+
+      <!-- Current Problem (Phase 2) -->
+      <section class="section" id="problem-section">
+        <p class="section__label">Current Problem</p>
+        <div id="problem-detected" class="problem hidden">
+          <div class="problem__header">
+            <span id="problem-title" class="problem__title">—</span>
+            <span id="problem-difficulty" class="problem__badge">—</span>
+          </div>
+          <span id="problem-slug" class="problem__slug">—</span>
+          <span class="problem__status">✓ Problem detected</span>
+        </div>
+        <div id="problem-none">
+          <span class="problem__empty">No LeetCode problem detected.</span>
+          <span class="problem__hint">Open a problem page on LeetCode.</span>
+        </div>
+      </section>
+
+      <!-- GitHub Account -->
+
+      <section class="section" id="account-section">
+        <p class="section__label">GitHub Account</p>
+        <div id="account-connected" class="account hidden">
+          <span class="account__check">✓</span>
+          <span id="github-username" class="account__name">Loading…</span>
+        </div>
+        <div id="account-disconnected">
+          <button id="connect-btn" class="btn btn--primary btn--full">
+            Connect GitHub
+          </button>
+        </div>
+      </section>
+
+      <!-- Repository -->
+      <section class="section" id="repo-section">
+        <p class="section__label">Repository</p>
+        <div class="input-row">
+          <span id="repo-display" class="input-display">—</span>
+        </div>
+      </section>
+
+      <!-- Branch -->
+      <section class="section">
+        <p class="section__label">Branch</p>
+        <span id="branch-display" class="input-display">main</span>
+      </section>
+
+      <!-- Auto Sync Toggle -->
+      <section class="section section--row">
+        <p class="section__label">Auto Sync</p>
+        <label class="toggle" for="auto-sync-toggle">
+          <input type="checkbox" id="auto-sync-toggle" />
+          <span class="toggle__track"></span>
+        </label>
+      </section>
+
+      <!-- Last Sync -->
+      <section class="section" id="last-sync-section">
+        <p class="section__label">Last Sync</p>
+        <div id="last-sync-content" class="last-sync">
+          <span class="last-sync__empty">No syncs yet</span>
+        </div>
+      </section>
+
+      <!-- Actions -->
+      <div class="actions">
+        <button id="test-btn" class="btn btn--secondary">
+          Test GitHub Connection
+        </button>
+        <button id="settings-btn" class="btn btn--ghost">
+          Open Settings
+        </button>
+      </div>
+
+      <!-- Version -->
+      <footer class="footer">
+        <span class="footer__version" id="version-label">v1.0.0</span>
+      </footer>
+    </div>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

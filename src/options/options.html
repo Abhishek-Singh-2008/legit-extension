@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LeetCode GitHub Sync — Settings</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <div class="options">
+      <header class="options-header">
+        <div class="options-header__logo">
+          <img src="../icons/icon48.png" alt="LCSync" class="options-header__icon" />
+          <div>
+            <h1 class="options-header__title">LeetCode GitHub Sync</h1>
+            <p class="options-header__subtitle">Settings</p>
+          </div>
+        </div>
+        <span id="save-status" class="save-status hidden">Saved ✓</span>
+      </header>
+
+      <main class="options-body">
+
+        <!-- GitHub Account -->
+        <section class="card" id="section-account">
+          <h2 class="card__title">GitHub Account</h2>
+
+          <!-- Connected state -->
+          <div id="account-connected" class="account-connected hidden">
+            <div class="account-connected__avatar-wrap">
+              <img id="account-avatar" class="account-connected__avatar" src="" alt="" />
+              <div class="account-connected__badge" title="Connected">✓</div>
+            </div>
+            <div class="account-connected__info">
+              <p class="account-connected__label">Connected as</p>
+              <p id="account-username" class="account-connected__username">@username</p>
+              <p id="account-repo" class="account-connected__repo"></p>
+            </div>
+            <button id="disconnect-btn" class="btn btn--danger btn--sm">Disconnect</button>
+          </div>
+
+          <!-- Disconnected state -->
+          <div id="account-disconnected">
+            <div class="pat-instructions">
+              <p class="pat-instructions__title">How to connect</p>
+              <ol class="pat-instructions__steps">
+                <li>
+                  Go to
+                  <a
+                    href="https://github.com/settings/personal-access-tokens/new"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="pat-instructions__link"
+                  >GitHub → Settings → Fine-grained tokens → Generate new token</a>
+                </li>
+                <li>Set <strong>Resource owner</strong> to <code>Abhishek-Singh-2008</code></li>
+                <li>Under <strong>Repository access</strong>, choose <em>Only selected repositories</em> → select <code>leetcode-solutions</code></li>
+                <li>Under <strong>Repository permissions</strong>, set <strong>Contents</strong> to <em>Read and write</em></li>
+                <li>Generate the token, copy it, and paste it below</li>
+              </ol>
+            </div>
+
+            <div class="field pat-field">
+              <label class="field__label" for="pat-input">Fine-grained Personal Access Token</label>
+              <div class="pat-field__row">
+                <input
+                  id="pat-input"
+                  class="field__input"
+                  type="password"
+                  placeholder="github_pat_…"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+                <button id="pat-toggle" class="btn btn--ghost btn--sm" type="button" aria-label="Show token">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                    <path d="M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2Zm0 1.5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9ZM8 6a2 2 0 1 0 0 4A2 2 0 0 0 8 6Z"/>
+                  </svg>
+                </button>
+              </div>
+              <p class="field__hint">Your token is stored locally and never sent outside of GitHub API calls.</p>
+            </div>
+
+            <div id="connect-error" class="connect-error hidden"></div>
+
+            <button id="connect-btn" class="btn btn--primary connect-btn">
+              <span id="connect-btn-text">Verify &amp; Connect</span>
+              <span id="connect-spinner" class="spinner hidden" aria-hidden="true"></span>
+            </button>
+          </div>
+        </section>
+
+        <!-- Repository Settings -->
+        <section class="card">
+          <h2 class="card__title">Repository</h2>
+          <div class="field">
+            <label class="field__label" for="repo-input">GitHub Repository</label>
+            <input
+              id="repo-input"
+              class="field__input"
+              type="text"
+              placeholder="username/repository-name"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <p class="field__hint">e.g. abhishek/leetcode-solutions</p>
+          </div>
+          <div class="field">
+            <label class="field__label" for="branch-input">Branch</label>
+            <input
+              id="branch-input"
+              class="field__input"
+              type="text"
+              placeholder="main"
+              autocomplete="off"
+            />
+          </div>
+          <div class="field">
+            <label class="field__label" for="basedir-input">Base Directory</label>
+            <input
+              id="basedir-input"
+              class="field__input"
+              type="text"
+              placeholder="algorithms"
+              autocomplete="off"
+            />
+            <p class="field__hint">Leave blank to store at repository root.</p>
+          </div>
+          <div class="field">
+            <label class="field__label" for="folder-format">Folder Structure</label>
+            <select id="folder-format" class="field__select">
+              <option value="{slug}">{slug} — e.g. two-sum/solution.py</option>
+              <option value="{difficulty}/{slug}">{difficulty}/{slug} — e.g. easy/two-sum/solution.py</option>
+              <option value="{slug}/{language}">{slug}/{language} — e.g. two-sum/python/solution.py</option>
+            </select>
+          </div>
+        </section>
+
+        <!-- Commit Settings -->
+        <section class="card">
+          <h2 class="card__title">Commits</h2>
+          <div class="field">
+            <label class="field__label" for="commit-format">Commit Message Format</label>
+            <input
+              id="commit-format"
+              class="field__input"
+              type="text"
+              placeholder="feat: add {title} solution"
+              autocomplete="off"
+            />
+            <p class="field__hint">Tokens: {title} {slug} {difficulty} {language}</p>
+          </div>
+        </section>
+
+        <!-- Behaviour Settings -->
+        <section class="card">
+          <h2 class="card__title">Behaviour</h2>
+          <div class="toggle-row">
+            <div>
+              <p class="toggle-row__label">Auto Sync</p>
+              <p class="toggle-row__desc">Automatically push accepted solutions.</p>
+            </div>
+            <label class="toggle" for="auto-sync">
+              <input type="checkbox" id="auto-sync" />
+              <span class="toggle__track"></span>
+            </label>
+          </div>
+          <div class="toggle-row">
+            <div>
+              <p class="toggle-row__label">Generate README</p>
+              <p class="toggle-row__desc">Create a README.md alongside each solution.</p>
+            </div>
+            <label class="toggle" for="gen-readme">
+              <input type="checkbox" id="gen-readme" />
+              <span class="toggle__track"></span>
+            </label>
+          </div>
+          <div class="toggle-row">
+            <div>
+              <p class="toggle-row__label">Notifications</p>
+              <p class="toggle-row__desc">Show desktop notifications on sync.</p>
+            </div>
+            <label class="toggle" for="notifications">
+              <input type="checkbox" id="notifications" />
+              <span class="toggle__track"></span>
+            </label>
+          </div>
+        </section>
+
+        <!-- Danger Zone -->
+        <section class="card card--danger">
+          <h2 class="card__title card__title--danger">Danger Zone</h2>
+          <div class="danger-row">
+            <div>
+              <p class="toggle-row__label">Reset All Settings</p>
+              <p class="toggle-row__desc">Clear all stored data including your GitHub token.</p>
+            </div>
+            <button id="reset-btn" class="btn btn--danger btn--sm">Reset</button>
+          </div>
+        </section>
+
+      </main>
+
+      <footer class="options-footer">
+        <span id="version-label" class="options-footer__version">v1.0.0</span>
+        <button id="save-btn" class="btn btn--primary">Save Settings</button>
+      </footer>
+    </div>
+
+    <script type="module" src="options.js"></script>
+  </body>
+</html>
