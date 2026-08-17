@@ -303,17 +303,6 @@ export function extractCodeSafely(): {
   logger.info(`Extractor: ${extractorName}`);
   logger.info("Code extraction: SUCCESS");
 
-  // ── Development Debug Log (Phase 4 testing) ─────────────────────────────────
-  console.log(
-    `%c[LCSync Debug: Extracted Code]`,
-    "color: #3fb950; font-weight: bold;"
-  );
-  console.log(`Extractor: ${extractorName}`);
-  console.log(`Language:  ${language}`);
-  console.log(`Length:    ${code.length} characters`);
-  console.log("---------------------- CODE START ----------------------");
-  console.log(code);
-  console.log("----------------------- CODE END -----------------------");
-
+  logger.debug(`Extracted code length: ${code.length} characters using ${extractorName}`);
   return { code, language, extractorName };
 }

@@ -39,8 +39,7 @@
 
   "permissions": [
     "storage",
-    "notifications",
-    "identity"
+    "notifications"
   ],
 
   "host_permissions": [

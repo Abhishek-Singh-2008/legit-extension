@@ -17,8 +17,7 @@
         <span id="status-badge" class="badge badge--disconnected">Not connected</span>
       </header>
 
-
-      <!-- Current Problem (Phase 2) -->
+      <!-- Current Problem -->
       <section class="section" id="problem-section">
         <p class="section__label">Current Problem</p>
         <div id="problem-detected" class="problem hidden">
@@ -36,7 +35,6 @@
       </section>
 
       <!-- GitHub Account -->
-
       <section class="section" id="account-section">
         <p class="section__label">GitHub Account</p>
         <div id="account-connected" class="account hidden">
@@ -51,7 +49,7 @@
         </div>
       </section>
 
-      <!-- Repository -->
+      <!-- Repository & Branch -->
       <section class="section" id="repo-section">
         <p class="section__label">Repository</p>
         <div class="input-row">
@@ -59,10 +57,9 @@
         </div>
       </section>
 
-      <!-- Branch -->
       <section class="section">
         <p class="section__label">Branch</p>
-        <span id="branch-display" class="input-display">main</span>
+        <span id="branch-display" class="input-display">—</span>
       </section>
 
       <!-- Auto Sync Toggle -->
@@ -74,21 +71,41 @@
         </label>
       </section>
 
-      <!-- Last Sync -->
-      <section class="section" id="last-sync-section">
-        <p class="section__label">Last Sync</p>
-        <div id="last-sync-content" class="last-sync">
-          <span class="last-sync__empty">No syncs yet</span>
+      <!-- Stats Summary (Phase 10) -->
+      <section class="section" id="stats-section">
+        <div class="section__header">
+          <p class="section__label">Sync Summary</p>
+        </div>
+        <div class="stats-summary">
+          <div class="stats-summary__item">
+            <span id="stats-total" class="stats-summary__value">0</span>
+            <span class="stats-summary__label">Total Syncs</span>
+          </div>
+          <div class="stats-summary__item">
+            <span id="stats-rate" class="stats-summary__value">0%</span>
+            <span class="stats-summary__label">Success Rate</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Recent Sync History (Phase 10) -->
+      <section class="section" id="history-section">
+        <div class="section__header">
+          <p class="section__label">Recent Syncs (Latest 5)</p>
+          <button id="clear-history-popup-btn" class="btn--link" title="Clear history">Clear</button>
+        </div>
+        <div id="history-list" class="history-list">
+          <span class="history-list__empty">No sync history yet</span>
         </div>
       </section>
 
       <!-- Actions -->
       <div class="actions">
         <button id="test-btn" class="btn btn--secondary">
-          Test GitHub Connection
+          Test Connection
         </button>
         <button id="settings-btn" class="btn btn--ghost">
-          Open Settings
+          Open Settings / Dashboard
         </button>
       </div>
 

@@ -1,9 +1,13 @@
-// ─── Popup Script — Phase 7 UI Polish ────────────────────────────────────────
-// Uses GET_CONNECTION_STATUS (not GET_SETTINGS) for auth display so the token
-// is never accessible in the popup context.
+// ─── Popup Script — Phase 10: Sync History & Dashboard ───────────────────────
+// Displays connection status, current problem, settings shortcuts,
+// summary statistics, and the latest 5 sync history records.
+//
+// Security containment:
+//   - Token is never loaded or exposed here.
+//   - Commit links are validated to start with https://github.com/ before opening.
 
 import { logger } from "@/utils/logger";
-import type { ExtensionSettings, LastSyncRecord } from "@/types/settings";
+import type { ExtensionSettings, SyncHistoryRecord, SyncStats } from "@/types/settings";
 import type { LeetCodeProblem } from "@/types/leetcode";
 import type { ConnectionStatus } from "@/storage/storage";
 
@@ -33,10 +37,12 @@ function initVersion(): void {
 
 async function loadAndRender(): Promise<void> {
   try {
-    const [connRes, settingsRes, problemRes] = await Promise.all([
+    const [connRes, settingsRes, problemRes, historyRes, statsRes] = await Promise.all([
       chrome.runtime.sendMessage({ type: "GET_CONNECTION_STATUS" }),
       chrome.runtime.sendMessage({ type: "GET_SETTINGS" }),
       chrome.runtime.sendMessage({ type: "GET_CURRENT_PROBLEM" }),
+      chrome.runtime.sendMessage({ type: "GET_SYNC_HISTORY", limit: 5 }),
+      chrome.runtime.sendMessage({ type: "GET_SYNC_STATS" }),
     ]);
 
     if (connRes?.ok) {
@@ -47,6 +53,12 @@ async function loadAndRender(): Promise<void> {
     }
     if (problemRes?.ok) {
       renderProblem(problemRes.data as LeetCodeProblem | null);
+    }
+    if (statsRes?.ok) {
+      renderStats(statsRes.data as SyncStats);
+    }
+    if (historyRes?.ok) {
+      renderHistory(historyRes.data as SyncHistoryRecord[]);
     }
   } catch (err) {
     logger.error("Failed to load popup data:", err);
@@ -85,23 +97,21 @@ function renderConnection(status: ConnectionStatus): void {
 }
 
 function renderSettings(s: Partial<ExtensionSettings>): void {
-  // Repository — show configured repo or the hardcoded target
+  // Repository
   const repoDisplay = $id("repo-display");
   if (repoDisplay) {
-    repoDisplay.textContent =
-      s.repository ?? "Abhishek-Singh-2008/leetcode-solutions-test";
+    const owner = s.githubRepoOwner;
+    const name = s.githubRepoName;
+    repoDisplay.textContent = owner && name ? `${owner}/${name}` : "— not configured —";
   }
 
   // Branch
   const branchDisplay = $id("branch-display");
-  if (branchDisplay) branchDisplay.textContent = s.branch ?? "main";
+  if (branchDisplay) branchDisplay.textContent = s.githubBranch ?? "—";
 
   // Auto sync toggle
   const autoSyncToggle = $id<HTMLInputElement>("auto-sync-toggle");
   if (autoSyncToggle) autoSyncToggle.checked = s.autoSync ?? true;
-
-  // Last sync
-  renderLastSync(s.lastSync);
 }
 
 function renderProblem(problem: LeetCodeProblem | null): void {
@@ -130,50 +140,113 @@ function renderProblem(problem: LeetCodeProblem | null): void {
   }
 }
 
-function renderLastSync(ls: LastSyncRecord | undefined): void {
-  const container = $id("last-sync-content");
+function renderStats(stats: SyncStats): void {
+  const totalEl = $id("stats-total");
+  const rateEl = $id("stats-rate");
+
+  if (totalEl) totalEl.textContent = String(stats.total);
+  if (rateEl) {
+    const rate = stats.total > 0 ? Math.round((stats.success / stats.total) * 100) : 0;
+    rateEl.textContent = `${rate}%`;
+  }
+}
+
+function renderHistory(history: SyncHistoryRecord[]): void {
+  const container = $id("history-list");
   if (!container) return;
 
-  if (!ls) {
-    container.innerHTML = `<span class="last-sync__empty">No syncs yet</span>`;
+  if (!history || history.length === 0) {
+    container.innerHTML = `<span class="history-list__empty">No sync history yet</span>`;
     return;
   }
 
-  const when = timeAgo(new Date(ls.timestamp));
-  const icon = ls.success ? "✓" : "✗";
-  const iconClass = ls.success ? "last-sync__icon--success" : "last-sync__icon--error";
+  let html = "";
+  for (const item of history) {
+    const when = timeAgo(new Date(item.timestamp));
+    let icon = "✓";
+    let iconClass = "history-item__icon--success";
 
-  const linkHtml = ls.commitUrl
-    ? `<a href="${escapeHtml(ls.commitUrl)}" class="last-sync__link" id="commit-link"
-         target="_blank" rel="noopener noreferrer">View commit ↗</a>`
-    : "";
+    switch (item.status) {
+      case "success":
+        icon = "✓";
+        iconClass = "history-item__icon--success";
+        break;
+      case "duplicate":
+        icon = "○";
+        iconClass = "history-item__icon--skipped";
+        break;
+      case "skipped":
+        icon = "○";
+        iconClass = "history-item__icon--skipped";
+        break;
+      case "auth":
+        icon = "⚠";
+        iconClass = "history-item__icon--warning";
+        break;
+      case "failed":
+      default:
+        icon = "⚠";
+        iconClass = "history-item__icon--error";
+        break;
+    }
 
-  container.innerHTML = `
-    <div class="last-sync__item">
-      <span class="last-sync__icon ${iconClass}">${icon}</span>
-      <div class="last-sync__info">
-        <span class="last-sync__title">${escapeHtml(ls.title)}</span>
-        <span class="last-sync__time">${when}</span>
-        ${ls.errorMessage ? `<span class="last-sync__error">${escapeHtml(ls.errorMessage)}</span>` : ""}
-        ${linkHtml}
+    const diffBadge = item.difficulty
+      ? `<span class="history-item__badge history-item__badge--${item.difficulty.toLowerCase()}">${item.difficulty}</span>`
+      : "";
+
+    const langBadge = item.language
+      ? `<span class="history-item__lang">${escapeHtml(item.language)}</span>`
+      : "";
+
+    // Commit link safety: only if valid HTTPS GitHub URL
+    const safeCommitUrl =
+      item.commitUrl && item.commitUrl.startsWith("https://github.com/")
+        ? item.commitUrl
+        : null;
+
+    const linkHtml = safeCommitUrl
+      ? `<a href="${escapeHtml(safeCommitUrl)}" class="history-item__link" data-commit-url="${escapeHtml(safeCommitUrl)}">View commit ↗</a>`
+      : "";
+
+    html += `
+      <div class="history-item">
+        <span class="history-item__icon ${iconClass}">${icon}</span>
+        <div class="history-item__info">
+          <div class="history-item__top">
+            <span class="history-item__title" title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</span>
+            ${diffBadge}
+          </div>
+          <div class="history-item__sub">
+            ${langBadge}
+            <span class="history-item__time">${when}</span>
+            <span class="history-item__status-text history-item__status-text--${item.status}">${item.status}</span>
+          </div>
+          ${item.errorMessage ? `<span class="history-item__error">${escapeHtml(item.errorMessage)}</span>` : ""}
+          ${linkHtml}
+        </div>
       </div>
-    </div>
-  `;
-
-  // External link must open via chrome.tabs.create (popup context blocks target=_blank)
-  const commitLink = $id("commit-link");
-  if (commitLink && ls.commitUrl) {
-    commitLink.addEventListener("click", (e) => {
-      e.preventDefault();
-      chrome.tabs.create({ url: ls.commitUrl! });
-    });
+    `;
   }
+
+  container.innerHTML = html;
+
+  // Bind safe click handlers for commit links
+  const links = container.querySelectorAll<HTMLAnchorElement>(".history-item__link");
+  links.forEach((link) => {
+    link.addEventListener("click", (e) => {
+      e.preventDefault();
+      const url = link.dataset.commitUrl;
+      if (url && url.startsWith("https://github.com/")) {
+        chrome.tabs.create({ url });
+      }
+    });
+  });
 }
 
 // ── Events ────────────────────────────────────────────────────────────────────
 
 function bindEvents(): void {
-  // Connect GitHub → redirect to Options page (auth is done there)
+  // Connect GitHub → redirect to Options page
   $id("connect-btn")?.addEventListener("click", () => {
     chrome.runtime.openOptionsPage();
   });
@@ -188,7 +261,21 @@ function bindEvents(): void {
     logger.debug(`Auto sync set to: ${checked}`);
   });
 
-  // Test GitHub connection — actually tests stored token against GET /user
+  // Clear popup history button
+  $id("clear-history-popup-btn")?.addEventListener("click", async () => {
+    if (confirm("Clear recent sync history?")) {
+      await chrome.runtime.sendMessage({ type: "CLEAR_SYNC_HISTORY" });
+      const [historyRes, statsRes] = await Promise.all([
+        chrome.runtime.sendMessage({ type: "GET_SYNC_HISTORY", limit: 5 }),
+        chrome.runtime.sendMessage({ type: "GET_SYNC_STATS" }),
+      ]);
+      if (historyRes?.ok) renderHistory(historyRes.data as SyncHistoryRecord[]);
+      if (statsRes?.ok) renderStats(statsRes.data as SyncStats);
+      showToast("History cleared", "info");
+    }
+  });
+
+  // Test GitHub connection
   $id("test-btn")?.addEventListener("click", async () => {
     const btn = $id<HTMLButtonElement>("test-btn");
     if (!btn) return;
@@ -201,7 +288,6 @@ function bindEvents(): void {
         showToast("Not connected — open Settings to connect GitHub", "error");
         return;
       }
-      // PING the worker as a health check
       const pingRes = await chrome.runtime.sendMessage({ type: "PING" });
       if (pingRes?.ok) {
         showToast(`✓ Connected as @${connRes.data.username ?? "—"}`, "success");
@@ -216,7 +302,7 @@ function bindEvents(): void {
     }
   });
 
-  // Open settings
+  // Open settings / dashboard
   $id("settings-btn")?.addEventListener("click", () => {
     chrome.runtime.openOptionsPage();
   });
@@ -226,6 +312,7 @@ function bindEvents(): void {
 
 function timeAgo(date: Date): string {
   const diff = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (isNaN(diff) || diff < 0) return "just now";
   if (diff < 60) return "just now";
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
@@ -237,7 +324,8 @@ function escapeHtml(str: string): string {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 function showToast(message: string, type: "success" | "error" | "info"): void {

@@ -34,6 +34,7 @@ function sanitize(args: unknown[]): unknown[] {
   return args.map((arg) => {
     if (typeof arg === "string") {
       return arg
+        .replace(/github_pat_[A-Za-z0-9_]{10,}/g, "github_pat_***REDACTED***")
         .replace(/ghp_[A-Za-z0-9]{36}/g, "ghp_***REDACTED***")
         .replace(/gho_[A-Za-z0-9]{36}/g, "gho_***REDACTED***")
         .replace(/Bearer [A-Za-z0-9._-]{10,}/g, "Bearer ***REDACTED***");

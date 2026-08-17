@@ -17,6 +17,11 @@ export interface GitHubRepository {
   description: string | null;
 }
 
+export interface GitHubBranch {
+  name: string;
+  protected: boolean;
+}
+
 export interface GitHubFileContents {
   type: "file" | "dir" | "symlink" | "submodule";
   name: string;

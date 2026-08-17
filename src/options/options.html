@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>LeetCode GitHub Sync — Settings</title>
+    <title>LeetCode GitHub Sync — Settings &amp; Dashboard</title>
     <link rel="stylesheet" href="options.css" />
   </head>
   <body>
@@ -13,7 +13,7 @@
           <img src="../icons/icon48.png" alt="LCSync" class="options-header__icon" />
           <div>
             <h1 class="options-header__title">LeetCode GitHub Sync</h1>
-            <p class="options-header__subtitle">Settings</p>
+            <p class="options-header__subtitle">Settings &amp; Dashboard</p>
           </div>
         </div>
         <span id="save-status" class="save-status hidden">Saved ✓</span>
@@ -21,7 +21,69 @@
 
       <main class="options-body">
 
-        <!-- GitHub Account -->
+        <!-- ── Sync Dashboard & Analytics (Phase 10) ────────────────────── -->
+        <section class="card" id="section-dashboard">
+          <div class="card__header-row">
+            <h2 class="card__title">Sync Dashboard &amp; Analytics</h2>
+            <button id="clear-history-dash-btn" class="btn btn--danger btn--sm">Clear History</button>
+          </div>
+
+          <!-- Stats Grid -->
+          <div class="dash-stats-grid">
+            <div class="dash-stat-card">
+              <span id="dash-total-syncs" class="dash-stat-card__val">0</span>
+              <span class="dash-stat-card__lbl">Total Sync Attempts</span>
+            </div>
+            <div class="dash-stat-card">
+              <span id="dash-success-rate" class="dash-stat-card__val">0%</span>
+              <span class="dash-stat-card__lbl">Success Rate</span>
+            </div>
+            <div class="dash-stat-card">
+              <div class="dash-diff-pills">
+                <span class="dash-diff-pill dash-diff-pill--easy">Easy: <strong id="dash-easy-cnt">0</strong></span>
+                <span class="dash-diff-pill dash-diff-pill--medium">Med: <strong id="dash-medium-cnt">0</strong></span>
+                <span class="dash-diff-pill dash-diff-pill--hard">Hard: <strong id="dash-hard-cnt">0</strong></span>
+              </div>
+              <span class="dash-stat-card__lbl">Difficulty Breakdown</span>
+            </div>
+            <div class="dash-stat-card">
+              <span id="dash-top-langs" class="dash-stat-card__val dash-stat-card__val--sm">—</span>
+              <span class="dash-stat-card__lbl">Top Languages</span>
+            </div>
+          </div>
+
+          <!-- Search & Filter Controls -->
+          <div class="dash-controls">
+            <div class="dash-controls__search">
+              <input
+                id="dash-search-input"
+                class="field__input"
+                type="text"
+                placeholder="Search by problem title or slug…"
+                autocomplete="off"
+              />
+            </div>
+            <div class="dash-controls__filter">
+              <select id="dash-status-filter" class="field__select">
+                <option value="all">All Statuses</option>
+                <option value="success">Success</option>
+                <option value="duplicate">Duplicate</option>
+                <option value="failed">Failed</option>
+                <option value="skipped">Skipped</option>
+                <option value="auth">Auth Expired</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- History Table / Records -->
+          <div id="dash-history-container" class="dash-history-container">
+            <div id="dash-history-list" class="dash-history-list">
+              <span class="dash-history-empty">Loading history…</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ── GitHub Account ──────────────────────────────────────────── -->
         <section class="card" id="section-account">
           <h2 class="card__title">GitHub Account</h2>
 
@@ -34,7 +96,6 @@
             <div class="account-connected__info">
               <p class="account-connected__label">Connected as</p>
               <p id="account-username" class="account-connected__username">@username</p>
-              <p id="account-repo" class="account-connected__repo"></p>
             </div>
             <button id="disconnect-btn" class="btn btn--danger btn--sm">Disconnect</button>
           </div>
@@ -53,8 +114,8 @@
                     class="pat-instructions__link"
                   >GitHub → Settings → Fine-grained tokens → Generate new token</a>
                 </li>
-                <li>Set <strong>Resource owner</strong> to <code>Abhishek-Singh-2008</code></li>
-                <li>Under <strong>Repository access</strong>, choose <em>Only selected repositories</em> → select <code>leetcode-solutions-test</code></li>
+                <li>Set <strong>Resource owner</strong> to your GitHub username</li>
+                <li>Under <strong>Repository access</strong>, choose <em>Only selected repositories</em> → select your LeetCode solutions repository</li>
                 <li>Under <strong>Repository permissions</strong>, set <strong>Contents</strong> to <em>Read and write</em></li>
                 <li>Generate the token, copy it, and paste it below</li>
               </ol>
@@ -89,31 +150,46 @@
           </div>
         </section>
 
-        <!-- Repository Settings -->
+        <!-- ── Repository Configuration (shown only when connected) ────── -->
+        <section class="card" id="repo-config-section">
+          <h2 class="card__title">Repository Configuration</h2>
+
+          <div class="field">
+            <label class="field__label" for="repo-select">GitHub Repository</label>
+            <div class="repo-select-row">
+              <select id="repo-select" class="field__select" disabled>
+                <option value="">— Select repository —</option>
+              </select>
+              <button id="reload-repos-btn" class="btn btn--ghost btn--sm btn--icon" type="button" title="Refresh repository list">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                  <path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/>
+                  <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/>
+                </svg>
+              </button>
+            </div>
+            <p id="repo-select-hint" class="field__hint">Loading your repositories…</p>
+          </div>
+
+          <div class="field" id="branch-field">
+            <label class="field__label" for="branch-select">Branch</label>
+            <select id="branch-select" class="field__select" disabled>
+              <option value="">— Select branch —</option>
+            </select>
+            <p class="field__hint">Defaults to the repository's default branch.</p>
+          </div>
+
+          <div id="repo-status" class="repo-status hidden"></div>
+
+          <button id="save-repo-btn" class="btn btn--primary" disabled>
+            <span id="save-repo-btn-text">Save Repository</span>
+            <span id="save-repo-spinner" class="spinner hidden" aria-hidden="true"></span>
+          </button>
+        </section>
+
+        <!-- ── Sync Settings ───────────────────────────────────────────── -->
         <section class="card">
-          <h2 class="card__title">Repository</h2>
-          <div class="field">
-            <label class="field__label" for="repo-input">GitHub Repository</label>
-            <input
-              id="repo-input"
-              class="field__input"
-              type="text"
-              placeholder="username/repository-name"
-              autocomplete="off"
-              spellcheck="false"
-            />
-            <p class="field__hint">e.g. abhishek/leetcode-solutions-test</p>
-          </div>
-          <div class="field">
-            <label class="field__label" for="branch-input">Branch</label>
-            <input
-              id="branch-input"
-              class="field__input"
-              type="text"
-              placeholder="main"
-              autocomplete="off"
-            />
-          </div>
+          <h2 class="card__title">Sync Settings</h2>
+
           <div class="field">
             <label class="field__label" for="basedir-input">Base Directory</label>
             <input
@@ -123,8 +199,9 @@
               placeholder="algorithms"
               autocomplete="off"
             />
-            <p class="field__hint">Leave blank to store at repository root.</p>
+            <p class="field__hint">Leave blank to store files at the repository root.</p>
           </div>
+
           <div class="field">
             <label class="field__label" for="folder-format">Folder Structure</label>
             <select id="folder-format" class="field__select">
@@ -135,7 +212,7 @@
           </div>
         </section>
 
-        <!-- Commit Settings -->
+        <!-- ── Commit Settings ─────────────────────────────────────────── -->
         <section class="card">
           <h2 class="card__title">Commits</h2>
           <div class="field">
@@ -151,7 +228,7 @@
           </div>
         </section>
 
-        <!-- Behaviour Settings -->
+        <!-- ── Behaviour Settings ──────────────────────────────────────── -->
         <section class="card">
           <h2 class="card__title">Behaviour</h2>
           <div class="toggle-row">
@@ -186,7 +263,7 @@
           </div>
         </section>
 
-        <!-- Danger Zone -->
+        <!-- ── Danger Zone ─────────────────────────────────────────────── -->
         <section class="card card--danger">
           <h2 class="card__title card__title--danger">Danger Zone</h2>
           <div class="danger-row">

@@ -7,22 +7,25 @@
 //   - Token is NEVER logged, returned in responses, or stored here.
 //   - Caller is responsible for secure storage AFTER successful verification.
 //
-// Expected PAT configuration:
-//   Resource owner : Abhishek-Singh-2008
-//   Repository     : leetcode-solutions-test (only selected)
-//   Permission     : Contents → Read and write
+// PAT required permissions:
+//   - Contents → Read and write (on the selected repository)
 
 import type { GitHubUser, GitHubRepository } from "@/types/github";
 import { loadSettings } from "@/storage/storage";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-export interface ConnectedAccount {
+export interface VerifiedUser {
   login: string;
   name: string | null;
   avatarUrl: string;
-  repoFullName: string;
-  repoPrivate: boolean;
+}
+
+export interface VerifiedRepo {
+  fullName: string;
+  defaultBranch: string;
+  isPrivate: boolean;
+  canPush: boolean;
 }
 
 export class GitHubAuthError extends Error {
@@ -40,26 +43,19 @@ export class GitHubAuthError extends Error {
   }
 }
 
-// ── Constants ──────────────────────────────────────────────────────────────────
+// ── Constants ─────────────────────────────────────────────────────────────────
 
 const GITHUB_API = "https://api.github.com";
-const EXPECTED_REPO_FULL_NAME = "Abhishek-Singh-2008/leetcode-solutions-test";
 
-// ── Core Verification ─────────────────────────────────────────────────────────
+// ── Step 1: Verify Token ───────────────────────────────────────────────────────
 
 /**
- * Verifies a fine-grained PAT by:
- *   1. Calling GET /user to confirm the token is valid and get account info.
- *   2. Calling GET /repos/{owner}/{repo} to confirm the repo is accessible.
- *   3. Checking the permissions object for write access (best-effort).
- *
- * Returns sanitized account metadata on success.
- * Throws GitHubAuthError with a specific code on failure.
- *
- * The token is NEVER included in the returned value.
+ * Verifies a fine-grained PAT by calling GET /user.
+ * Returns authenticated user identity.
+ * Does NOT verify any specific repository — that is a separate step.
+ * Token is NEVER included in the returned value.
  */
-export async function verifyAndConnect(token: string): Promise<ConnectedAccount> {
-  // ── Step 1: Verify token and get user identity ────────────────────────────
+export async function verifyToken(token: string): Promise<VerifiedUser> {
   let user: GitHubUser;
   try {
     const res = await githubFetch(token, "/user");
@@ -90,22 +86,42 @@ export async function verifyAndConnect(token: string): Promise<ConnectedAccount>
     );
   }
 
-  // ── Step 2: Verify repository is accessible ───────────────────────────────
+  return {
+    login: user.login,
+    name: user.name,
+    avatarUrl: user.avatar_url,
+  };
+}
+
+// ── Step 2: Verify Repository Access (separate from auth) ─────────────────────
+
+/**
+ * Verifies that the stored token can access the given repository.
+ * This is called when the user selects a repository from the dropdown,
+ * NOT during initial token verification.
+ *
+ * Returns sanitized repo metadata including defaultBranch and canPush flag.
+ * Token is NEVER included in the returned value.
+ */
+export async function verifyRepoAccess(
+  token: string,
+  owner: string,
+  repoName: string
+): Promise<VerifiedRepo> {
+  const fullName = `${owner}/${repoName}`;
+
   let repo: GitHubRepository;
   try {
-    const res = await githubFetch(token, `/repos/${EXPECTED_REPO_FULL_NAME}`);
+    const res = await githubFetch(token, `/repos/${fullName}`);
     if (res.status === 404) {
       throw new GitHubAuthError(
-        `Repository "${EXPECTED_REPO_FULL_NAME}" was not found. ` +
-          "Ensure the PAT is scoped to this repository and the repo exists.",
+        `Repository "${fullName}" was not found or is not accessible with this token.`,
         "REPO_NOT_FOUND"
       );
     }
     if (res.status === 403) {
       throw new GitHubAuthError(
-        `Access to "${EXPECTED_REPO_FULL_NAME}" is forbidden. ` +
-          "Ensure the PAT is a fine-grained token scoped to this repository " +
-          "with Contents → Read and write permission.",
+        `Access to "${fullName}" is forbidden. Ensure the PAT has Contents → Read and write permission on this repository.`,
         "INSUFFICIENT_PERMISSIONS"
       );
     }
@@ -124,32 +140,21 @@ export async function verifyAndConnect(token: string): Promise<ConnectedAccount>
     );
   }
 
-  // ── Step 3: Best-effort write permission check ────────────────────────────
-  // GitHub includes a `permissions` object for authenticated users.
-  // Fine-grained tokens with Contents R+W will have push: true.
+  // Best-effort permission check — GitHub includes `permissions` for authenticated users
   const repoWithPerms = repo as GitHubRepository & {
     permissions?: { pull?: boolean; push?: boolean; admin?: boolean };
   };
 
-  if (repoWithPerms.permissions !== undefined) {
-    const canPush = repoWithPerms.permissions.push === true;
-    if (!canPush) {
-      throw new GitHubAuthError(
-        `The PAT can read "${EXPECTED_REPO_FULL_NAME}" but does not have write access. ` +
-          "Recreate the PAT with Contents → Read and write.",
-        "INSUFFICIENT_PERMISSIONS"
-      );
-    }
-  }
-  // If permissions field is absent (some fine-grained tokens omit it),
-  // we trust the token and let actual write operations surface errors later.
+  const canPush =
+    repoWithPerms.permissions === undefined
+      ? true // permissions absent — trust and surface errors later on actual write
+      : repoWithPerms.permissions.push === true;
 
   return {
-    login: user.login,
-    name: user.name,
-    avatarUrl: user.avatar_url,
-    repoFullName: repo.full_name,
-    repoPrivate: repo.private,
+    fullName: repo.full_name,
+    defaultBranch: repo.default_branch,
+    isPrivate: repo.private,
+    canPush,
   };
 }
 

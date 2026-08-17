@@ -104,27 +104,17 @@ watchSubmissionResult({
     logger.info(`[LCSync] Accepted: ${problem.title}`);
     logger.info("[LCSync] Fetching code from LeetCode API...");
 
-    // Fetch code via LeetCode's own GraphQL API — reliable, no DOM extraction
+    // Fetch code via LeetCode's own GraphQL API
     const result = await fetchAcceptedCode(problem.slug);
 
-    if (!result || !result.code) {
-      logger.error("[LCSync] Could not fetch code from LeetCode API.");
-      return;
+    const code = result?.code ?? "";
+    const language = result?.language ?? "python3";
+
+    if (!code || code.trim().length === 0) {
+      logger.error("[LCSync] Could not extract your submitted code (empty result).");
+    } else {
+      logger.debug(`[LCSync] Code extracted successfully (${code.length} chars, ${language})`);
     }
-
-    const { code, language } = result;
-
-    // ── Development Debug Log (Phase 4 testing) ─────────────────────────────
-    console.log(
-      `%c[LCSync Debug: Extracted Code]`,
-      "color: #3fb950; font-weight: bold;"
-    );
-    console.log(`Language:  ${language}`);
-    console.log(`Length:    ${code.length} characters`);
-    console.log("---------------------- CODE START ----------------------");
-    console.log(code);
-    console.log("----------------------- CODE END -----------------------");
-    // ─────────────────────────────────────────────────────────────────────────
 
     // Construct full submission payload
     const submission: LeetCodeSubmission = {
