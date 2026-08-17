@@ -5,3 +5,6 @@ dist/
 Thumbs.db
 *.zip
 *.crx
+.env
+.env.*
+.venv
