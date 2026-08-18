@@ -1,21 +1,97 @@
 # LeetCode GitHub Sync
 
-> A production-quality Chrome Extension (Manifest V3) that automatically synchronises accepted LeetCode solutions to your GitHub repository.
+A privacy-first, multi-user Chrome Extension that automatically synchronizes accepted LeetCode solutions to the user's own GitHub repository.
+
+![Manifest V3](https://img.shields.io/badge/Manifest-V3-blue)
+![TypeScript](https://img.shields.io/badge/TypeScript-blue)
+![Vite](https://img.shields.io/badge/Vite-purple)
+
+> 🚧 **Current Distribution**: The extension is currently available for peer testing as an unpacked Chrome extension. Chrome Web Store publication is planned for a later release.
+
+---
+
+## 📌 Current Status
+
+| Area | Status |
+|---|---|
+| Core extension | ✅ Ready |
+| Multi-user GitHub support | ✅ Ready |
+| Automatic sync | ✅ Ready |
+| Error handling & recovery | ✅ Ready |
+| Sync history & dashboard | ✅ Ready |
+| Peer testing | 🧪 In progress |
+| Chrome Web Store publication | 🔜 Planned |
+
+---
+
+## 📦 Install for Peer Testing
+
+> ℹ️ **Pre-Built Version**: This package contains a pre-built testing version of the extension with the production-ready `dist/` folder included. Chrome Web Store publication is planned for a future release.
+
+### Download ZIP (No Node.js, npm, or Terminal Required)
+
+Peers testing this extension do **NOT** need Node.js, npm, Git, or terminal commands.
+
+1. **Download ZIP**: Download `leetcode-github-sync-v1.0.0.zip` or click **Code → Download ZIP** on GitHub.
+2. **Extract ZIP**: Extract the downloaded ZIP archive on your computer.
+3. **Open Extensions Page**: Open Google Chrome and go to `chrome://extensions`.
+4. **Enable Developer Mode**: Turn on the **Developer mode** toggle switch in the top-right corner.
+5. **Load Extension**: Click **Load unpacked** in the top-left menu.
+6. **Select `dist/` Folder**: Open the extracted folder and select the **`dist/`** directory.
+7. **Start Using**: The extension will appear in your Chrome toolbar!
+
+---
+
+## 🚀 Quick Setup Guide
+
+1. **Open Extension Options**: Click the extension icon and select **Open Settings / Dashboard** (or right-click icon → Options).
+2. **Create your OWN GitHub Fine-Grained PAT**:
+   - Go to [GitHub → Settings → Personal access tokens → Fine-grained tokens](https://github.com/settings/personal-access-tokens/new).
+   - Set **Resource owner** to your GitHub account.
+   - Under **Repository access**, choose **Only selected repositories** and select your target repository.
+   - Under **Repository permissions**, set **Contents** to **Read and write**.
+   - Click **Generate token** and copy the token (`github_pat_…`).
+3. **Connect Your Account**: Paste your token in Options → click **Verify & Connect**.
+4. **Select Repository & Branch**: Select your **OWN** GitHub repository and branch, then click **Save Repository**.
+5. **Submit Solution**: Open any problem on [LeetCode](https://leetcode.com/problems/) and submit a solution.
+6. **Verify Sync**: Check your selected GitHub repository to confirm the solution file and `README.md` have been committed!
+
+> ⚠️ **Important**: Every user must connect using their **OWN** GitHub account and their **OWN** Fine-grained Personal Access Token. Never share your token with anyone or commit it to a repository.
+
+---
+
+## 🧪 Peer Testing Checklist
+
+Please test the following features and workflows:
+- [ ] Extension installs cleanly from the pre-built `dist/` folder without running terminal commands
+- [ ] GitHub Fine-grained PAT verification connects successfully
+- [ ] Personal GitHub repositories load in the dropdown menu
+- [ ] Branch selection loads and enables saving
+- [ ] Accepted LeetCode submissions automatically push to GitHub
+- [ ] Automated `README.md` generation works alongside solutions
+- [ ] Submitting unchanged code is correctly skipped as a duplicate
+- [ ] Modifying a solution updates the existing file on GitHub
+- [ ] Local Sync History records each submission attempt
+- [ ] Options Dashboard statistics (Total Syncs, Success Rate %, Difficulty breakdown) update accurately
+- [ ] Authentication errors (e.g. invalid/expired PAT) are handled gracefully
+- [ ] Network/API failures trigger retry notifications without crashing
+
+> 🐛 **Feedback & Bug Reports**: If you encounter a bug or unexpected behavior during testing, please open a [GitHub Issue](https://github.com/Abhishek-Singh-2008/legit-extension/issues) with steps to reproduce it.
 
 ---
 
 ## What It Does
 
 ```
-User solves Two Sum on LeetCode
-         ↓
-Clicks Submit → Accepted
-         ↓
-Extension detects the verdict
-         ↓
-Extracts source code + metadata
-         ↓
-Pushes to GitHub
+Solve a problem on LeetCode (e.g. Two Sum)
+          ↓
+Click Submit → Verdict: Accepted
+          ↓
+Extension detects the accepted verdict
+          ↓
+Extracts problem metadata & source code
+          ↓
+Pushes solution & README to your GitHub repository
 
 algorithms/two-sum/solution.py
 algorithms/two-sum/README.md
@@ -23,236 +99,199 @@ algorithms/two-sum/README.md
 
 ---
 
-## Features
+## Key Features
 
-| Feature | Status |
-|---|---|
-| Manifest V3 (Chrome) | ✅ |
-| TypeScript + Vite | ✅ |
-| LeetCode SPA navigation detection | ✅ |
-| Submission detection (MutationObserver) | Phase 3 |
-| Code extraction (Monaco editor) | Phase 4 |
-| GitHub App OAuth (no broad `repo` scope) | Phase 5 |
-| GitHub REST API push | Phase 7 |
-| Auto README generation | Phase 8 |
-| Duplicate detection (SHA-256 hash) | Phase 9 |
-| Popup + Settings UI | ✅ (skeleton) |
+- **Automatic Synchronization**: Detects accepted submissions on LeetCode problem pages in real-time and pushes solution code and problem documentation to GitHub.
+- **Fine-Grained Personal Access Token (PAT) Authentication**: Authenticates securely using GitHub Fine-grained PATs with scoped `Contents: Read and write` access to your selected repository. No OAuth servers or broad account permissions required.
+- **Multi-User & Multi-Repository Support**: Any GitHub user can connect their account and select any repository and branch they have write access to.
+- **Customizable Folder Formats**: Organize solutions by folder structure (`{slug}`, `{difficulty}/{slug}`, `{slug}/{language}`) and configurable base directories.
+- **Template-Based Commit Messages**: Custom commit message templates supporting `{title}`, `{slug}`, `{difficulty}`, and `{language}` placeholders.
+- **Automatic README Generation**: Creates structured `README.md` files alongside solutions containing difficulty, language, problem links, and submission date.
+- **SHA-256 Duplicate Detection**: Hashes solution code to prevent duplicate GitHub commits when re-submitting unchanged code.
+- **Resilient Error Recovery & Retries**: Retries transient API and network failures with exponential backoff (1s, 3s) while handling token expiration (HTTP 401) and rate limits gracefully.
+- **Sync History & Dashboard**: Stores up to 200 local sync records with an interactive Options Dashboard featuring search, status filtering, difficulty stats, top language metrics, and commit links.
+- **100% Serverless & Local-Only Privacy**: Solution code is sent directly from your browser to GitHub via the official REST API. Tokens are stored in `chrome.storage.local` and are never uploaded to any external server or logged.
 
 ---
 
 ## Architecture
 
 ```
-chrome.tabs (LeetCode page)
-         │
-    content/leetcode.ts          ← SPA nav + problem detection
-    content/submission-detector  ← MutationObserver on result DOM
-    content/code-extractor       ← Monaco/CodeMirror reader
-         │
-         │  chrome.runtime.sendMessage
-         ▼
-    background/service-worker.ts ← Message router
-         │
-    github/github-auth.ts        ← OAuth flow
-    github/github-api.ts         ← REST API client
-    github/github-repository.ts  ← Path generation
-    github/github-file.ts        ← README + commit formatting
-         │
-         ▼
-    GitHub REST API
-    └── repos/{owner}/{repo}/contents/{path}
+LeetCode Tab (leetcode.com/problems/*)
+          │
+     content/leetcode.ts           ← SPA navigation listener & coordinator
+     content/problem-detector.ts   ← Problem title, slug, difficulty
+     content/submission-detector   ← Verdict watcher (MutationObserver)
+     content/leetcode-api.ts       ← GraphQL query for accepted code
+          │
+          │ chrome.runtime.sendMessage
+          ▼
+     background/service-worker.ts  ← Message router & orchestrator
+          │
+          ├── storage/storage.ts        ← chrome.storage.local wrapper & stats
+          ├── utils/hash.ts            ← SHA-256 submission deduplication
+          ├── utils/errors.ts          ← Extension error hierarchy & HTTP classifiers
+          │
+          ▼
+     github/github-push.ts         ← Push pipeline orchestrator
+          ├── github/github-api.ts      ← GitHub REST API client with retry backoff
+          ├── github/github-auth.ts     ← PAT verification & repo access check
+          ├── github/github-repository.ts← File path resolver
+          └── github/github-file.ts     ← README generator & commit message template
+          │
+          ▼
+     GitHub REST API (api.github.com)
+     └── /repos/{owner}/{repo}/contents/{path}
 ```
-
-### Message Flow
-
-```
-Content Script ──SUBMISSION_ACCEPTED──► Background SW
-                                              │
-                              ┌───────────────┼───────────────┐
-                              ▼               ▼               ▼
-                       Check duplicate   Load settings   GitHub API push
-                              │                               │
-                              └───────────── notify ──────────┘
-```
-
----
-
-## Tech Stack
-
-| Layer | Technology |
-|---|---|
-| Language | TypeScript (strict mode) |
-| Build | Vite 5 |
-| Extension API | Chrome Manifest V3 |
-| Auth | GitHub OAuth App (PKCE) |
-| Storage | `chrome.storage.local` |
-| Notifications | `chrome.notifications` |
-| HTTP | `fetch` (native, no extra deps) |
 
 ---
 
 ## Project Structure
 
 ```
-leetcode-github-sync/
-├── public/icons/          # Extension icons (16/32/48/128px)
-├── src/
-│   ├── background/
-│   │   └── service-worker.ts   # Message router + coordinator
-│   ├── content/
-│   │   ├── leetcode.ts         # Entry point, SPA nav
-│   │   ├── submission-detector.ts
-│   │   ├── code-extractor.ts
-│   │   └── dom-utils.ts
-│   ├── github/
-│   │   ├── github-api.ts       # REST client
-│   │   ├── github-auth.ts      # OAuth flow
-│   │   ├── github-repository.ts
-│   │   └── github-file.ts
-│   ├── storage/
-│   │   └── storage.ts          # Typed chrome.storage wrapper
-│   ├── types/
-│   │   ├── leetcode.ts
-│   │   ├── github.ts
-│   │   └── settings.ts
-│   ├── popup/
-│   │   ├── popup.html/ts/css
-│   ├── options/
-│   │   ├── options.html/ts/css
-│   └── utils/
-│       ├── logger.ts           # Token-redacting logger
-│       ├── errors.ts           # Typed error hierarchy
-│       └── slugify.ts          # Slug + language utils
+legit-extension/
+├── manifest.json                  # Manifest V3 configuration
+├── package.json                   # Dependencies & build scripts
+├── tsconfig.json                  # TypeScript configuration (strict mode)
+├── vite.config.ts                 # Vite bundler & IIFE content script build
+├── public/
+│   └── icons/                     # Extension icons (16/32/48/128px)
 ├── scripts/
-│   └── postbuild.mjs           # Copies HTML/CSS/manifest to dist/
-├── manifest.json
-├── vite.config.ts
-└── tsconfig.json
+│   ├── postbuild.mjs              # Post-build asset copy script
+│   └── create-zip.mjs             # Distribution ZIP packager
+└── src/
+    ├── background/
+    │   └── service-worker.ts      # MV3 Service Worker (message router & pipeline)
+    ├── content/
+    │   ├── leetcode.ts            # Content script entry point & SPA nav listener
+    │   ├── problem-detector.ts    # LeetCode problem detector
+    │   ├── submission-detector.ts # Verdict DOM watcher
+    │   ├── leetcode-api.ts        # LeetCode GraphQL API client
+    │   └── code-extractor.ts      # Monaco & CodeMirror code reader
+    ├── github/
+    │   ├── github-api.ts          # GitHub REST API client (with retry backoff)
+    │   ├── github-auth.ts         # Token verification & repository access checks
+    │   ├── github-file.ts         # README generator & commit message formatter
+    │   ├── github-push.ts         # GitHub file push orchestrator
+    │   └── github-repository.ts   # File path resolver
+    ├── options/
+    │   ├── options.html           # Options & Dashboard HTML layout
+    │   ├── options.ts             # Options script (PAT connect, repo select, dashboard)
+    │   └── options.css            # Options & Dashboard stylesheet
+    ├── popup/
+    │   ├── popup.html             # Extension popup HTML layout
+    │   ├── popup.ts               # Popup script (status, stats summary, recent syncs)
+    │   └── popup.css              # Popup stylesheet
+    ├── storage/
+    │   └── storage.ts             # Typed chrome.storage.local wrapper & stats calculator
+    ├── types/
+    │   ├── github.ts              # GitHub API interfaces
+    │   ├── leetcode.ts            # LeetCode problem & submission interfaces
+    │   └── settings.ts            # Extension settings, LastSync, History & Stats types
+    └── utils/
+        ├── errors.ts              # Custom ExtensionError hierarchy & HTTP error handling
+        ├── hash.ts                # Web Crypto SHA-256 hash utility
+        ├── logger.ts              # Token-redacting logger
+        └── slugify.ts             # Slugifier & programming language extension mapper
 ```
 
 ---
 
-## Installation (Development)
+## Build From Source (For Developers & Contributors)
 
-### Prerequisites
-
-- Node.js 18+
-- npm 9+
-- Google Chrome
-
-### Build
+Developers who want to modify source code or build from scratch require Node.js and npm:
 
 ```bash
-git clone <repo>
-cd leetcode-github-sync
+# 1. Clone repository
+git clone https://github.com/Abhishek-Singh-2008/legit-extension.git
+cd legit-extension
+
+# 2. Install dependencies
 npm install
-npm run build:fast
+
+# 3. Typecheck TypeScript
+npm run typecheck
+
+# 4. Build production extension (outputs to dist/)
+npm run build
+
+# 5. Package distribution ZIP
+node scripts/create-zip.mjs
 ```
-
-The `dist/` folder is the unpacked extension.
-
-### Load in Chrome
-
-1. Open `chrome://extensions`
-2. Enable **Developer mode** (top-right toggle)
-3. Click **Load unpacked**
-4. Select the `dist/` folder
-
-You should see the extension icon in your toolbar.
-
-### Development Watch Mode
-
-```bash
-npm run dev
-```
-
-Vite will rebuild on every file change. Reload the extension in `chrome://extensions` after each rebuild (click the ↺ button on the extension card).
 
 ---
 
-## GitHub App Setup (Phase 5)
+## Extension Configuration Options
 
-> Not required for Phase 1. Instructions will be added when Phase 5 is implemented.
-
-The extension uses a **GitHub OAuth App** with:
-
-```
-Scopes:
-  repo (Contents: Read & Write — repository-specific via App installation)
-```
-
-**Never** store the `client_secret` in the extension source.
-
----
-
-## Permissions
-
-| Permission | Reason |
-|---|---|
-| `storage` | Store settings and submission history |
-| `notifications` | Show sync success/failure notifications |
-| `identity` | Drive the OAuth popup for GitHub login |
-| `https://leetcode.com/*` | Read problem metadata and submission results |
-| `https://api.github.com/*` | Push solutions via REST API |
-| `https://github.com/*` | OAuth redirect handling |
-
-No `<all_urls>`. No broad `repo` scope without explicit user consent.
-
----
-
-## Security
-
-- **No secrets in source code.** `client_secret` is never bundled.
-- **Token redaction in logs.** The logger strips `ghp_*` and `Bearer *` patterns.
-- **Minimal host permissions.** Only `leetcode.com` and `api.github.com`.
-- **Storage isolation.** Tokens stored in `chrome.storage.local` (not `sync`).
-- **No code sent to external servers.** Code is sent only to the user's own GitHub repository.
-
----
-
-## Development Phases
-
-| Phase | Description | Status |
+| Setting | Description | Default |
 |---|---|---|
-| 1 | Extension skeleton (TypeScript + Vite + manifest) | ✅ Done |
-| 2 | LeetCode problem detection | 🔜 Next |
-| 3 | Submission detection | ⏳ |
-| 4 | Code extraction | ⏳ |
-| 5 | GitHub authentication | ⏳ |
-| 6 | Repository access | ⏳ |
-| 7 | First GitHub push | ⏳ |
-| 8 | README generation | ⏳ |
-| 9 | Duplicate detection | ⏳ |
-| 10 | UI polish | ⏳ |
-| 11 | Security review | ⏳ |
-| 12 | Production build | ⏳ |
+| **Base Directory** | Target directory in your repository (leave blank for root) | `algorithms` |
+| **Folder Structure** | `{slug}`, `{difficulty}/{slug}`, or `{slug}/{language}` | `{slug}` |
+| **Commit Message Format** | Template for commit messages (`{title}`, `{slug}`, `{difficulty}`, `{language}`) | `feat: add {title} solution` |
+| **Auto Sync** | Toggle automatic pushing on Accepted verdict | `true` |
+| **Generate README** | Automatically create a `README.md` alongside each solution | `true` |
+| **Notifications** | Show desktop notifications for sync results | `true` |
+
+---
+
+## Security & Privacy
+
+- **No Remote Servers / Serverless**: The extension communicates directly with `https://api.github.com` and `https://leetcode.com`. No intermediate proxy, tracking server, or backend is used.
+- **Isolated Token Storage**: Fine-grained PATs are saved in `chrome.storage.local` on your local machine. They are never synced across devices or exposed to content scripts or popups.
+- **Sanitized Logging**: All console logs pass through token redaction rules (`github_pat_*`, `ghp_*`, `gho_*`, `Bearer *`) to prevent credential leakage in devtools.
+- **Strict Input Escaping & Link Validation**: User inputs and problem titles pass through HTML escaping before rendering. External links are strictly validated to begin with `https://github.com/` before opening.
 
 ---
 
 ## Troubleshooting
 
-**Extension doesn't appear after loading:**
-- Check `chrome://extensions` for errors
-- Make sure you loaded the `dist/` folder, not the project root
-
-**Service worker errors:**
-- Open `chrome://extensions → LeetCode GitHub Sync → Service Worker` to inspect
-
-**Build errors:**
-- Run `npm run typecheck` to see TypeScript errors before building
+- **Branch Selection Troubleshooting**: If the branch list does not load, verify that your Fine-grained PAT has the required `Contents: Read and write` repository permission and try refreshing the repository list using the refresh button next to the dropdown. The extension does not silently switch to another branch.
+- **Code Extraction Error**: Make sure you are on a problem page with an active submission. Refresh the LeetCode page if LeetCode's DOM structure fails to load.
+- **Authentication Expired**: If you revoke or expire your PAT on GitHub, the extension notifies you and updates the sync status to `Auth Expired`. Re-enter a valid PAT in the Options page to reconnect.
+- **Duplicate Submissions Skipped**: Submitting identical code for the same problem will produce a `Duplicate` status to prevent unnecessary GitHub commits. To push an update, modify your solution code or comments.
 
 ---
 
-## Future Features
+## Known Limitations
 
-- LeetCode daily streak tracker
-- Problem difficulty / language statistics
-- Multiple repository support
-- AI-generated complexity analysis
-- Progress dashboard
+- **Single Solution File**: Synchronizes one primary solution file per submission (multi-file submissions are saved as a single solution file in V1).
+- **Complexity Analysis**: Time and space complexity fields in generated `README.md` files require manual complexity analysis notes to prevent automated fabrication.
+
+---
+
+## Roadmap & Future Improvements
+
+- [ ] Chrome Web Store publication after successful peer testing
+- [ ] Custom README templates
+- [ ] Support for problem tags and company tags
+- [ ] Multiple solution version history per problem
+- [ ] CSV / JSON statistics export
+
+---
+
+## ⭐ Support the Project
+
+If you find LeetCode GitHub Sync useful:
+- ⭐ **Star the GitHub repository** on [GitHub](https://github.com/Abhishek-Singh-2008/legit-extension)
+- 🐛 **Report bugs** through [GitHub Issues](https://github.com/Abhishek-Singh-2008/legit-extension/issues)
+- 💡 **Suggest improvements** or feature requests
+- 🤝 **Contribute** through Pull Requests
+- 📢 **Share it** with other developers and LeetCode peers!
+
+---
+
+## Contributing
+
+Contributions are welcome! Please follow these steps:
+1. Fork the repository on GitHub.
+2. Create a feature branch (`git checkout -b feature/amazing-feature`).
+3. Ensure TypeScript typechecks cleanly (`npm run typecheck`).
+4. Commit your changes (`git commit -m 'feat: add amazing feature'`).
+5. Push to your branch (`git push origin feature/amazing-feature`).
+6. Open a Pull Request.
 
 ---
 
 ## License
 
-MIT
+Formal licensing terms will be added in a future release prior to Chrome Web Store publication.
