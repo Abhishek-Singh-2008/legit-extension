@@ -24,21 +24,28 @@ A privacy-first, multi-user Chrome Extension that automatically synchronizes acc
 
 ---
 
-## 📦 Install for Peer Testing
+## 🚀 Try It Yourself
 
-> ℹ️ **Pre-Built Version**: This package contains a pre-built testing version of the extension with the production-ready `dist/` folder included. Chrome Web Store publication is planned for a future release.
+### 📦 Download the latest peer-testing version
 
-### Download ZIP (No Node.js, npm, or Terminal Required)
+👉 **[Download LeetCode GitHub Sync v1.0.0](https://github.com/Abhishek-Singh-2008/legit-extension/releases/latest)**
 
-Peers testing this extension do **NOT** need Node.js, npm, Git, or terminal commands.
+> This is a pre-built peer-testing version. No Node.js, npm, Git, or terminal is required.
 
-1. **Download ZIP**: Download `leetcode-github-sync-v1.0.0.zip` or click **Code → Download ZIP** on GitHub.
-2. **Extract ZIP**: Extract the downloaded ZIP archive on your computer.
-3. **Open Extensions Page**: Open Google Chrome and go to `chrome://extensions`.
-4. **Enable Developer Mode**: Turn on the **Developer mode** toggle switch in the top-right corner.
-5. **Load Extension**: Click **Load unpacked** in the top-left menu.
-6. **Select `dist/` Folder**: Open the extracted folder and select the **`dist/`** directory.
-7. **Start Using**: The extension will appear in your Chrome toolbar!
+### Installation
+
+1. Download the ZIP from the release page above.
+2. Extract the ZIP.
+3. Open `chrome://extensions` in Chrome.
+4. Enable **Developer mode**.
+5. Click **Load unpacked**.
+6. Open the extracted folder and select the **`dist`** folder.
+7. Open the extension's **Settings / Dashboard**.
+8. Connect using **your own GitHub Fine-grained PAT**.
+9. Select your GitHub repository and branch.
+10. Start solving on LeetCode.
+
+> ⚠️ **Never share your GitHub PAT with anyone.**
 
 ---
 
