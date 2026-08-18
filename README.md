@@ -28,7 +28,7 @@ A privacy-first, multi-user Chrome Extension that automatically synchronizes acc
 
 ### 📦 Download the latest peer-testing version
 
-👉 **[Download LeetCode GitHub Sync v1.0.0](https://github.com/Abhishek-Singh-2008/legit-extension/releases/latest)**
+👉 **[Download LeetCode GitHub Sync v1.0.0](https://github.com/Abhishek-Singh-2008/legit-extension/releases/download/v1.0.0/leetcode-github-sync-v1.0.0.zip)**
 
 > This is a pre-built peer-testing version. No Node.js, npm, Git, or terminal is required.
 
