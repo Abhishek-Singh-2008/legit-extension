@@ -232,10 +232,17 @@ function renderAccount(status: ConnectionStatus): void {
   if (isConnected && status.username) {
     $("account-username").textContent = `@${status.username}`;
     const avatarEl = $<HTMLImageElement>("account-avatar");
-    if (status.avatarUrl) {
-      avatarEl.src = status.avatarUrl;
-      avatarEl.alt = status.username;
-    }
+    const avatarSrc =
+      status.avatarUrl || `https://github.com/${status.username}.png`;
+
+    avatarEl.alt = status.username;
+    avatarEl.onerror = () => {
+      avatarEl.onerror = null;
+      const initial = (status.username?.charAt(0) ?? "U").toUpperCase();
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48"><rect width="48" height="48" rx="24" fill="#238636"/><text x="50%" y="55%" dominant-baseline="middle" text-anchor="middle" fill="#ffffff" font-family="sans-serif" font-size="22" font-weight="bold">${initial}</text></svg>`;
+      avatarEl.src = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+    };
+    avatarEl.src = avatarSrc;
   }
 }
 

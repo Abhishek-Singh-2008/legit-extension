@@ -86,9 +86,17 @@ function renderConnection(status: ConnectionStatus): void {
     accountConnected?.classList.remove("hidden");
     accountDisconnected?.classList.add("hidden");
     if (usernameEl) usernameEl.textContent = `@${status.username}`;
-    if (avatarEl && status.avatarUrl) {
-      avatarEl.src = status.avatarUrl;
+    if (avatarEl) {
+      const avatarSrc =
+        status.avatarUrl || `https://github.com/${status.username}.png`;
       avatarEl.alt = status.username;
+      avatarEl.onerror = () => {
+        avatarEl.onerror = null;
+        const initial = (status.username?.charAt(0) ?? "U").toUpperCase();
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36"><rect width="36" height="36" rx="18" fill="#238636"/><text x="50%" y="55%" dominant-baseline="middle" text-anchor="middle" fill="#ffffff" font-family="sans-serif" font-size="16" font-weight="bold">${initial}</text></svg>`;
+        avatarEl.src = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+      };
+      avatarEl.src = avatarSrc;
     }
   } else {
     accountConnected?.classList.add("hidden");

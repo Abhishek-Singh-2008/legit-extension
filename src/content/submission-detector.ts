@@ -50,6 +50,7 @@ export function watchSubmissionResult(
   logger.info("[SubmissionDetector] Initializing submission watcher...");
 
   let isSubmitting = false;
+  let hasReportedForCurrentSubmit = false;
   let lastProcessedKey = "";
 
   // 1. Submit Button Click Listener & Keyboard Listener
@@ -72,6 +73,7 @@ export function watchSubmissionResult(
     ) {
       logger.info("[SubmissionDetector] Submit button clicked!");
       isSubmitting = true;
+      hasReportedForCurrentSubmit = false;
       lastProcessedKey = ""; // Reset to allow fresh detection for new submission
     }
   };
@@ -81,6 +83,7 @@ export function watchSubmissionResult(
     if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
       logger.info("[SubmissionDetector] Submit keyboard shortcut detected (Ctrl/Cmd + Enter)");
       isSubmitting = true;
+      hasReportedForCurrentSubmit = false;
       lastProcessedKey = ""; // Reset to allow fresh detection for new submission
     }
   };
@@ -97,6 +100,11 @@ export function watchSubmissionResult(
 
     const submissionKey = `${verdict.status}:${verdict.identifier}`;
 
+    // Suppress multiple callbacks for the same active submit event
+    if (hasReportedForCurrentSubmit && !isSubmitting) {
+      return;
+    }
+
     // Prevent duplicate processing of the same result UNLESS user actively pressed Submit
     if (!isSubmitting && submissionKey === lastProcessedKey) {
       return;
@@ -109,6 +117,7 @@ export function watchSubmissionResult(
 
     lastProcessedKey = submissionKey;
     isSubmitting = false;
+    hasReportedForCurrentSubmit = true;
 
     logger.info(`[SubmissionDetector] Submission verdict detected: ${verdict.status}`);
 

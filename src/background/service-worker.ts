@@ -58,6 +58,9 @@ export type BackgroundResponse =
   | { ok: true; data?: unknown }
   | { ok: false; error: string };
 
+// In-flight push tracker to suppress concurrent duplicate push executions
+const inFlightPushes = new Set<string>();
+
 // ── Listener ─────────────────────────────────────────────────────────────────
 
 chrome.runtime.onMessage.addListener(
@@ -410,6 +413,13 @@ async function handleMessage(
 
       // ── 5. Deduplication ────────────────────────────────────────────────────
       const hash = await sha256(`${submission.slug}:${submission.language}:${submission.code}`);
+
+      // Suppress concurrent in-flight submissions of identical payload
+      if (inFlightPushes.has(hash)) {
+        logger.info(`[Push] In-flight sync already in progress for ${submission.slug} — skipping concurrent duplicate.`);
+        return { ok: true };
+      }
+
       const isDuplicate = await isSubmissionDuplicate(hash);
       if (isDuplicate) {
         logger.info(`[Push] Duplicate submission detected (${submission.slug}) — skipping.`);
@@ -441,6 +451,7 @@ async function handleMessage(
 
       // ── 6. Push to GitHub ───────────────────────────────────────────────────
       logger.info(`[LCSync] Starting GitHub sync for ${submission.slug}...`);
+      inFlightPushes.add(hash);
       let pushResult;
       try {
         pushResult = await pushSubmissionToGitHub(submission, token, settings);
@@ -493,6 +504,8 @@ async function handleMessage(
         });
 
         return { ok: false, error: msg };
+      } finally {
+        inFlightPushes.delete(hash);
       }
 
       // ── 7. Record deduplication hash ────────────────────────────────────────

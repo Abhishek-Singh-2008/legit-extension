@@ -139,10 +139,14 @@ export interface ConnectionStatus {
 export async function loadConnectionStatus(): Promise<ConnectionStatus> {
   const settings = await loadSettings();
   const connected = Boolean(settings.githubToken && settings.githubUsername);
+  const avatarUrl =
+    settings.githubAvatarUrl ||
+    (settings.githubUsername ? `https://github.com/${settings.githubUsername}.png` : undefined);
+
   return {
     connected,
     username: settings.githubUsername,
-    avatarUrl: settings.githubAvatarUrl,
+    avatarUrl,
     repoOwner: settings.githubRepoOwner,
     repoName: settings.githubRepoName,
     branch: settings.githubBranch,
@@ -201,16 +205,12 @@ export async function loadSyncHistory(limit?: number): Promise<SyncHistoryRecord
   return history;
 }
 
-/**
- * Adds a new sync history record.
- * Keeps at most MAX_HISTORY_RECORDS (200), newest first.
- * Never stores tokens or sensitive auth credentials.
- */
-export async function addSyncHistoryRecord(
+let historyWriteLock = Promise.resolve();
+
+async function _addSyncHistoryRecordInternal(
   entry: Omit<SyncHistoryRecord, "id">
 ): Promise<SyncHistoryRecord> {
   const existing = await loadSyncHistory();
-  const id = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
   // Ensure commitUrl is only saved if valid HTTPS GitHub URL
   let safeCommitUrl: string | undefined = undefined;
@@ -218,6 +218,41 @@ export async function addSyncHistoryRecord(
     safeCommitUrl = entry.commitUrl;
   }
 
+  // Idempotency check: prevent duplicate records for the same logical submission event
+  const entryTimestampMs = new Date(entry.timestamp).getTime();
+  const duplicate = existing.find((rec) => {
+    // Must match the same problem slug, language, and status
+    if (rec.slug !== entry.slug || rec.language !== entry.language || rec.status !== entry.status) {
+      return false;
+    }
+
+    // 1. If both records have commit URLs, match on exact commitUrl
+    if (safeCommitUrl && rec.commitUrl && safeCommitUrl === rec.commitUrl) {
+      return true;
+    }
+
+    // 2. If both records have filePath, check if timestamp is within 60 seconds (same push cycle)
+    const recTimestampMs = new Date(rec.timestamp).getTime();
+    const timeDiffMs = Math.abs(entryTimestampMs - recTimestampMs);
+
+    if (entry.filePath && rec.filePath === entry.filePath && timeDiffMs < 60000) {
+      return true;
+    }
+
+    // 3. Near-simultaneous events for the same problem/language/status (< 15 seconds)
+    if (timeDiffMs < 15000) {
+      return true;
+    }
+
+    return false;
+  });
+
+  if (duplicate) {
+    logger.info(`[History] Duplicate history record suppressed for "${entry.title}" (${entry.status})`);
+    return duplicate;
+  }
+
+  const id = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
   const record: SyncHistoryRecord = {
     ...entry,
     id,
@@ -228,6 +263,23 @@ export async function addSyncHistoryRecord(
   await chrome.storage.local.set({ [HISTORY_KEY]: updated });
   logger.info(`[History] Added record ${record.id} for "${record.title}" (${record.status})`);
   return record;
+}
+
+/**
+ * Adds a new sync history record.
+ * Serialized via Promise queue to prevent concurrent race conditions.
+ * Keeps at most MAX_HISTORY_RECORDS (200), newest first.
+ * Never stores tokens or sensitive auth credentials.
+ */
+export async function addSyncHistoryRecord(
+  entry: Omit<SyncHistoryRecord, "id">
+): Promise<SyncHistoryRecord> {
+  return new Promise((resolve, reject) => {
+    historyWriteLock = historyWriteLock
+      .then(() => _addSyncHistoryRecordInternal(entry))
+      .then(resolve)
+      .catch(reject);
+  });
 }
 
 /**
