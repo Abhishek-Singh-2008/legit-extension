@@ -93,48 +93,62 @@ function sendProblemDetected(problem: LeetCodeProblem | null): void {
 
 // ── Submission Watching & Code Fetch (Phases 3 & 4) ──────────────────────────
 
+let isHandlingAccepted = false;
+
 watchSubmissionResult({
   onAccepted: async (status: SubmissionStatus) => {
-    const problem = getCurrentProblem();
-    if (!problem) {
-      logger.warn(`[Content] Verdict ${status} detected but could not find problem details.`);
+    if (isHandlingAccepted) {
+      logger.debug("[Content] Already processing an Accepted submission — skipping duplicate callback.");
       return;
     }
+    isHandlingAccepted = true;
 
-    logger.info(`[LCSync] Accepted: ${problem.title}`);
-    logger.info("[LCSync] Fetching code from LeetCode API...");
+    try {
+      const problem = getCurrentProblem();
+      if (!problem) {
+        logger.warn(`[Content] Verdict ${status} detected but could not find problem details.`);
+        return;
+      }
 
-    // Fetch code via LeetCode's own GraphQL API
-    const result = await fetchAcceptedCode(problem.slug);
+      logger.info(`[LCSync] Accepted: ${problem.title}`);
+      logger.info("[LCSync] Fetching code from LeetCode API...");
 
-    const code = result?.code ?? "";
-    const language = result?.language ?? "python3";
+      // Fetch code via LeetCode's own GraphQL API
+      const result = await fetchAcceptedCode(problem.slug);
 
-    if (!code || code.trim().length === 0) {
-      logger.error("[LCSync] Could not extract your submitted code (empty result).");
-    } else {
-      logger.debug(`[LCSync] Code extracted successfully (${code.length} chars, ${language})`);
+      const code = result?.code ?? "";
+      const language = result?.language ?? "python3";
+
+      if (!code || code.trim().length === 0) {
+        logger.error("[LCSync] Could not extract your submitted code (empty result).");
+      } else {
+        logger.debug(`[LCSync] Code extracted successfully (${code.length} chars, ${language})`);
+      }
+
+      // Construct full submission payload
+      const submission: LeetCodeSubmission = {
+        title: problem.title,
+        slug: problem.slug,
+        url: problem.url,
+        difficulty: problem.difficulty,
+        language,
+        code,
+        submittedAt: new Date().toISOString(),
+      };
+
+      chrome.runtime
+        .sendMessage({ type: "SUBMISSION_ACCEPTED", submission })
+        .then(() => {
+          logger.debug("[Content] SUBMISSION_ACCEPTED message sent to background.");
+        })
+        .catch((err: unknown) => {
+          logger.error("[Content] Failed to send SUBMISSION_ACCEPTED:", err);
+        });
+    } finally {
+      setTimeout(() => {
+        isHandlingAccepted = false;
+      }, 3000);
     }
-
-    // Construct full submission payload
-    const submission: LeetCodeSubmission = {
-      title: problem.title,
-      slug: problem.slug,
-      url: problem.url,
-      difficulty: problem.difficulty,
-      language,
-      code,
-      submittedAt: new Date().toISOString(),
-    };
-
-    chrome.runtime
-      .sendMessage({ type: "SUBMISSION_ACCEPTED", submission })
-      .then(() => {
-        logger.debug("[Content] SUBMISSION_ACCEPTED message sent to background.");
-      })
-      .catch((err: unknown) => {
-        logger.error("[Content] Failed to send SUBMISSION_ACCEPTED:", err);
-      });
   },
 
   onRejected: (status: SubmissionStatus) => {
