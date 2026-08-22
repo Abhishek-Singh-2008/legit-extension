@@ -18,6 +18,10 @@ export interface LeetCodeSubmission {
   code: string;
   submittedAt: string; // ISO 8601
   submissionHash?: string; // SHA-256 of code, for deduplication
+  timeComplexity?: string;
+  spaceComplexity?: string;
+  complexityExplanation?: string;
+  complexity?: import("@/complexity").ComplexityAnalysis;
 }
 
 export type SubmissionStatus =

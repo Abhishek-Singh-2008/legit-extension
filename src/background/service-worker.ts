@@ -33,6 +33,7 @@ import {
   NetworkError,
   GitHubApiError,
 } from "@/utils/errors";
+import { analyzeComplexity } from "@/complexity";
 import type { LeetCodeProblem } from "@/types/leetcode";
 
 // ── Message Types ─────────────────────────────────────────────────────────────
@@ -318,6 +319,25 @@ async function handleMessage(
 
         return { ok: false, error: errMsg };
       }
+
+      // ── Ensure complexity analysis is present and preserved ─────────────────
+      if (!submission.complexity) {
+        try {
+          submission.complexity = analyzeComplexity(submission.code, submission.language);
+        } catch (err) {
+          logger.error("[ServiceWorker] Complexity analysis exception:", err);
+          submission.complexity = {
+            time: "O(?)",
+            space: "O(?)",
+            confidence: "low",
+            explanation: ["Static analysis error fallback"],
+            detectedPatterns: ["Analysis error fallback"],
+          };
+        }
+      }
+      submission.timeComplexity = submission.complexity.time;
+      submission.spaceComplexity = submission.complexity.space;
+      submission.complexityExplanation = submission.complexity.explanation.join("; ");
 
       // ── 1. Load settings ────────────────────────────────────────────────────
       const settings = await loadSettings();
