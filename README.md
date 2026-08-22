@@ -5,6 +5,7 @@ A privacy-first, multi-user Chrome Extension that automatically synchronizes acc
 ![Manifest V3](https://img.shields.io/badge/Manifest-V3-blue)
 ![TypeScript](https://img.shields.io/badge/TypeScript-blue)
 ![Vite](https://img.shields.io/badge/Vite-purple)
+![License](https://img.shields.io/badge/License-MIT-green)
 
 > 🚧 **Current Distribution**: The extension is currently available for peer testing as an unpacked Chrome extension. Chrome Web Store publication is planned for a later release.
 
@@ -301,4 +302,4 @@ Contributions are welcome! Please follow these steps:
 
 ## License
 
-Formal licensing terms will be added in a future release prior to Chrome Web Store publication.
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
