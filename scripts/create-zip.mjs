@@ -30,6 +30,10 @@ fs.mkdirSync(targetFolder, { recursive: true });
 fs.cpSync(path.join(root, "dist"), path.join(targetFolder, "dist"), { recursive: true });
 // Copy README.md
 fs.copyFileSync(path.join(root, "README.md"), path.join(targetFolder, "README.md"));
+// Copy LICENSE if present
+if (fs.existsSync(path.join(root, "LICENSE"))) {
+  fs.copyFileSync(path.join(root, "LICENSE"), path.join(targetFolder, "LICENSE"));
+}
 // Copy manifest.json if present
 if (fs.existsSync(path.join(root, "manifest.json"))) {
   fs.copyFileSync(path.join(root, "manifest.json"), path.join(targetFolder, "manifest.json"));
