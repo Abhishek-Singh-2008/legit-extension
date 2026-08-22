@@ -11,6 +11,7 @@ import { slugFromUrl } from "@/utils/slugify";
 import { getCurrentProblem } from "@/content/problem-detector";
 import { watchSubmissionResult } from "@/content/submission-detector";
 import { fetchAcceptedCode } from "@/content/leetcode-api";
+import { analyzeComplexity, type ComplexityAnalysis } from "@/complexity";
 import type { LeetCodeProblem, LeetCodeSubmission, SubmissionStatus } from "@/types/leetcode";
 
 logger.info("LeetCode GitHub Sync content script loaded.");
@@ -125,6 +126,21 @@ watchSubmissionResult({
         logger.debug(`[LCSync] Code extracted successfully (${code.length} chars, ${language})`);
       }
 
+      // Perform local static complexity analysis
+      let complexity: ComplexityAnalysis;
+      try {
+        complexity = analyzeComplexity(code, language);
+      } catch (err) {
+        logger.error("[LCSync] Static complexity analysis failed:", err);
+        complexity = {
+          time: "O(?)",
+          space: "O(?)",
+          confidence: "low",
+          explanation: ["Static analysis error fallback"],
+          detectedPatterns: ["Analysis error fallback"],
+        };
+      }
+
       // Construct full submission payload
       const submission: LeetCodeSubmission = {
         title: problem.title,
@@ -134,6 +150,10 @@ watchSubmissionResult({
         language,
         code,
         submittedAt: new Date().toISOString(),
+        complexity,
+        timeComplexity: complexity.time,
+        spaceComplexity: complexity.space,
+        complexityExplanation: complexity.explanation.join("; "),
       };
 
       chrome.runtime

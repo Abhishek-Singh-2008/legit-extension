@@ -113,7 +113,8 @@ algorithms/two-sum/README.md
 - **Multi-User & Multi-Repository Support**: Any GitHub user can connect their account and select any repository and branch they have write access to.
 - **Customizable Folder Formats**: Organize solutions by folder structure (`{slug}`, `{difficulty}/{slug}`, `{slug}/{language}`) and configurable base directories.
 - **Template-Based Commit Messages**: Custom commit message templates supporting `{title}`, `{slug}`, `{difficulty}`, and `{language}` placeholders.
-- **Automatic README Generation**: Creates structured `README.md` files alongside solutions containing difficulty, language, problem links, and submission date.
+- **Automatic README Generation**: Creates structured `README.md` files alongside solutions containing difficulty, language, problem links, submission date, and static complexity analysis.
+- **Static Time & Space Complexity Analysis**: Analyzes time ($O(1)$, $O(\log N)$, $O(N)$, $O(N \log N)$, $O(N^2)$) and space complexity of accepted Python, JavaScript, TypeScript, Java, and C++ solutions 100% locally in your browser.
 - **SHA-256 Duplicate Detection**: Hashes solution code to prevent duplicate GitHub commits when re-submitting unchanged code.
 - **Resilient Error Recovery & Retries**: Retries transient API and network failures with exponential backoff (1s, 3s) while handling token expiration (HTTP 401) and rate limits gracefully.
 - **Sync History & Dashboard**: Stores up to 200 local sync records with an interactive Options Dashboard featuring search, status filtering, difficulty stats, top language metrics, and commit links.
@@ -135,6 +136,7 @@ LeetCode Tab (leetcode.com/problems/*)
           ▼
      background/service-worker.ts  ← Message router & orchestrator
           │
+          ├── analyzer/complexity-analyzer.ts ← Local static time/space complexity engine
           ├── storage/storage.ts        ← chrome.storage.local wrapper & stats
           ├── utils/hash.ts            ← SHA-256 submission deduplication
           ├── utils/errors.ts          ← Extension error hierarchy & HTTP classifiers
