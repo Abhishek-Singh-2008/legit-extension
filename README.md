@@ -300,6 +300,14 @@ Contributions are welcome! Please follow these steps:
 
 ---
 
+## Privacy Policy
+
+Legit operates entirely client-side. We do not operate remote servers, collect telemetry, or share your data with third parties. All network calls occur directly between your browser, LeetCode, and GitHub.
+
+Read our full [Privacy Policy](privacy.html).
+
+---
+
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
