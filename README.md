@@ -1,4 +1,4 @@
-# LeetCode GitHub Sync
+# Legit
 
 A privacy-first, multi-user Chrome Extension that automatically synchronizes accepted LeetCode solutions to the user's own GitHub repository.
 
@@ -29,7 +29,7 @@ A privacy-first, multi-user Chrome Extension that automatically synchronizes acc
 
 ### 📦 Download the latest peer-testing version
 
-👉 **[Download LeetCode GitHub Sync v1.0.0](https://github.com/Abhishek-Singh-2008/legit-extension/releases/download/v1.0.0/leetcode-github-sync-v1.0.0.zip)**
+👉 **[Download Legit v1.0.0](https://github.com/Abhishek-Singh-2008/legit-extension/releases/download/v1.0.0/leetcode-github-sync-v1.0.0.zip)**
 
 > This is a pre-built peer-testing version. No Node.js, npm, Git, or terminal is required.
 
@@ -279,7 +279,7 @@ node scripts/create-zip.mjs
 
 ## ⭐ Support the Project
 
-If you find LeetCode GitHub Sync useful:
+If you find Legit useful:
 - ⭐ **Star the GitHub repository** on [GitHub](https://github.com/Abhishek-Singh-2008/legit-extension)
 - 🐛 **Report bugs** through [GitHub Issues](https://github.com/Abhishek-Singh-2008/legit-extension/issues)
 - 💡 **Suggest improvements** or feature requests
