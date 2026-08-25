@@ -3,7 +3,9 @@ import path from "path";
 import { execSync } from "child_process";
 
 const root = process.cwd();
-const zipName = "leetcode-github-sync-v1.0.0.zip";
+const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.json"), "utf8"));
+const version = manifest.version || "1.0.1";
+const zipName = `leetcode-github-sync-v${version}.zip`;
 const zipPath = path.join(root, zipName);
 
 console.log("Creating distribution ZIP for peer testing...");
