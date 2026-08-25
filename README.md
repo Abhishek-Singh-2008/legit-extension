@@ -1,4 +1,4 @@
-# Legit
+# Legit - LeetCode to GitHub Sync
 
 A privacy-first, multi-user Chrome Extension that automatically synchronizes accepted LeetCode solutions to the user's own GitHub repository.
 

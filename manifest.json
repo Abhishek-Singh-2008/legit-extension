@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Legit",
+  "name": "Legit - LeetCode to GitHub Sync",
   "version": "1.0.0",
   "description": "Automatically synchronizes accepted LeetCode solutions to your GitHub repository.",
 
@@ -19,7 +19,7 @@
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
     },
-    "default_title": "Legit"
+    "default_title": "Legit - LeetCode to GitHub Sync"
   },
 
   "background": {
