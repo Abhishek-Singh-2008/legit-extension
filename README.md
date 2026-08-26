@@ -6,8 +6,9 @@ A privacy-first, multi-user Chrome Extension that automatically synchronizes acc
 ![TypeScript](https://img.shields.io/badge/TypeScript-blue)
 ![Vite](https://img.shields.io/badge/Vite-purple)
 ![License](https://img.shields.io/badge/License-MIT-green)
+[![Chrome Web Store](https://img.shields.io/badge/Chrome_Web_Store-v1.0.1_Live-brightgreen?logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/ehjenhfhnkojhpljcdohihpjpngfljpo)
 
-> 🚧 **Current Distribution**: The extension is currently available for peer testing as an unpacked Chrome extension. Chrome Web Store publication is planned for a later release.
+> 🚀 **Official Release**: **Legit - LeetCode to GitHub Sync** is now live and publicly available on the [Chrome Web Store](https://chromewebstore.google.com/detail/ehjenhfhnkojhpljcdohihpjpngfljpo). Install it with a single click!
 
 ---
 
@@ -20,31 +21,39 @@ A privacy-first, multi-user Chrome Extension that automatically synchronizes acc
 | Automatic sync | ✅ Ready |
 | Error handling & recovery | ✅ Ready |
 | Sync history & dashboard | ✅ Ready |
-| Peer testing | 🧪 In progress |
-| Chrome Web Store publication | 🔜 Planned |
+| Peer testing | ✅ Completed |
+| Chrome Web Store | 🚀 Published / Live |
 
 ---
 
-## 🚀 Try It Yourself
+## 📦 Installation
 
-### 📦 Download the latest peer-testing version
+### Method 1: Chrome Web Store (Recommended)
 
-👉 **[Download Legit - LeetCode to GitHub Sync (Latest Release)](https://github.com/Abhishek-Singh-2008/legit-extension/releases/latest)**
+Install directly from the official Google Chrome Web Store for seamless one-click installation and automatic updates:
 
-> This is a pre-built peer-testing version. No Node.js, npm, Git, or terminal is required.
+👉 **[Install Legit from Chrome Web Store](https://chromewebstore.google.com/detail/ehjenhfhnkojhpljcdohihpjpngfljpo)**
 
-### Installation
+1. Visit the [Chrome Web Store Listing](https://chromewebstore.google.com/detail/ehjenhfhnkojhpljcdohihpjpngfljpo).
+2. Click **Add to Chrome**.
+3. Open the extension's **Settings / Dashboard**.
+4. Connect using **your own GitHub Fine-grained PAT**.
+5. Select your GitHub repository and branch.
+6. Start solving problems on LeetCode!
 
-1. Download the ZIP from the release page above.
-2. Extract the ZIP.
-3. Open `chrome://extensions` in Chrome.
-4. Enable **Developer mode**.
+---
+
+### Method 2: Manual Installation / Unpacked Extension (Optional / Developers)
+
+For developers or offline testing without the Chrome Web Store:
+
+1. Download the pre-built package from **[GitHub Releases](https://github.com/Abhishek-Singh-2008/legit-extension/releases/latest)**.
+2. Extract the ZIP archive.
+3. Open `chrome://extensions` in Google Chrome.
+4. Enable **Developer mode** (toggle in the top-right corner).
 5. Click **Load unpacked**.
-6. Open the extracted folder and select the **`dist`** folder.
-7. Open the extension's **Settings / Dashboard**.
-8. Connect using **your own GitHub Fine-grained PAT**.
-9. Select your GitHub repository and branch.
-10. Start solving on LeetCode.
+6. Select the extracted **`dist`** folder (or the root folder for Web Store builds).
+7. Open **Settings / Dashboard** and connect your GitHub account.
 
 > ⚠️ **Never share your GitHub PAT with anyone.**
 
@@ -269,7 +278,7 @@ node scripts/create-zip.mjs
 
 ## Roadmap & Future Improvements
 
-- [ ] Chrome Web Store publication after successful peer testing
+- [x] Chrome Web Store publication (Live at v1.0.1)
 - [ ] Custom README templates
 - [ ] Support for problem tags and company tags
 - [ ] Multiple solution version history per problem
