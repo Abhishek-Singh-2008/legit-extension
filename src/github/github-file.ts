@@ -1,14 +1,45 @@
-// ─── GitHub File Operations (Phase 1 stub) ───────────────────────────────────
-
 import type { LeetCodeSubmission } from "@/types/leetcode";
+import type { AIAnalysisResult } from "@/types/settings";
 
 /**
- * Generate a README.md for a submission.
- * Time/space complexity is intentionally omitted in V1 to avoid fabrication.
+ * Generate a README.md for a submission with optional AI complexity and approach analysis.
  */
-export function generateReadme(submission: LeetCodeSubmission): string {
+export function generateReadme(
+  submission: LeetCodeSubmission,
+  aiResult?: AIAnalysisResult
+): string {
   const languageDisplay =
     submission.language.charAt(0).toUpperCase() + submission.language.slice(1);
+
+  const formattedDate = new Date(submission.submittedAt).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+
+  let approachSection = "";
+  let complexitySection = "";
+
+  if (aiResult) {
+    if (aiResult.error) {
+      complexitySection = `## Complexity\n\n> ⚠️ *Complexity analysis unavailable (${aiResult.error}).*\n`;
+    } else {
+      if (aiResult.approach && aiResult.approach.trim().length > 0) {
+        approachSection = `## Approach & Intuition\n\n> ${aiResult.approach.trim()}\n\n`;
+      }
+
+      const timeText = aiResult.timeReason
+        ? `\`${aiResult.timeComplexity}\` — ${aiResult.timeReason}`
+        : `\`${aiResult.timeComplexity}\``;
+      const spaceText = aiResult.spaceReason
+        ? `\`${aiResult.spaceComplexity}\` — ${aiResult.spaceReason}`
+        : `\`${aiResult.spaceComplexity}\``;
+
+      complexitySection = `## Complexity\n\n- **Time Complexity:** ${timeText}\n- **Space Complexity:** ${spaceText}\n`;
+    }
+  } else {
+    complexitySection = `## Complexity\n\n> Time: Not provided  \n> Space: Not provided\n\n<!-- Add your own complexity analysis above. -->\n`;
+  }
 
   return `# ${submission.title}
 
@@ -22,19 +53,9 @@ ${submission.url}
 
 ## Solution
 
-Automatically synchronized from LeetCode on ${new Date(submission.submittedAt).toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  })}.
+Automatically synchronized from LeetCode on ${formattedDate}.
 
-## Complexity
-
-> Time: Not provided  
-> Space: Not provided
-
-<!-- Add your own complexity analysis above. -->
-`;
+${approachSection}${complexitySection}`;
 }
 
 /**

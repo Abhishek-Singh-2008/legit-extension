@@ -113,7 +113,35 @@ export async function pushSubmissionToGitHub(
 
     // ── Push README.md (optional) ───────────────────────────────────────────
     if (settings.generateReadme) {
-      const readmeContent = generateReadme(submission);
+      let aiResult = undefined;
+
+      if (settings.aiEnabled && settings.aiApiKey && settings.aiApiKey.trim().length > 0) {
+        logger.info(`[LCSync] Running AI complexity analysis via ${settings.aiProvider}...`);
+        try {
+          const { analyzeComplexity } = await import("@/ai/ai-client");
+          aiResult = await analyzeComplexity({
+            provider: settings.aiProvider,
+            apiKey: settings.aiApiKey,
+            model: settings.aiModel,
+            customEndpoint: settings.aiCustomEndpoint,
+            title: submission.title,
+            language: submission.language,
+            code: submission.code,
+          });
+        } catch (aiErr) {
+          logger.warn("[LCSync] AI analysis failed with error:", aiErr);
+          aiResult = {
+            approach: "",
+            timeComplexity: "",
+            timeReason: "",
+            spaceComplexity: "",
+            spaceReason: "",
+            error: aiErr instanceof Error ? aiErr.message : "AI analysis unavailable",
+          };
+        }
+      }
+
+      const readmeContent = generateReadme(submission, aiResult);
       const readmeMessage = `docs: add README for ${submission.title}`;
 
       const existingReadme = await client.getFile(repo, readmePath, branch);

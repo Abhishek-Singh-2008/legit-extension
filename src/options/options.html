@@ -102,51 +102,175 @@
 
           <!-- Disconnected state -->
           <div id="account-disconnected">
-            <div class="pat-instructions">
-              <p class="pat-instructions__title">How to connect</p>
-              <ol class="pat-instructions__steps">
-                <li>
-                  Go to
-                  <a
-                    href="https://github.com/settings/personal-access-tokens/new"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="pat-instructions__link"
-                  >GitHub → Settings → Fine-grained tokens → Generate new token</a>
-                </li>
-                <li>Set <strong>Resource owner</strong> to your GitHub username</li>
-                <li>Under <strong>Repository access</strong>, choose <em>Only selected repositories</em> → select your LeetCode solutions repository</li>
-                <li>Under <strong>Repository permissions</strong>, set <strong>Contents</strong> to <em>Read and write</em></li>
-                <li>Generate the token, copy it, and paste it below</li>
-              </ol>
+            <!-- Auth method tabs -->
+            <div class="auth-tabs">
+              <button id="tab-btn-device" class="auth-tab-btn active" type="button">⚡ 1-Click Connect (Recommended)</button>
+              <button id="tab-btn-pat" class="auth-tab-btn" type="button">🔑 Manual Access Token</button>
             </div>
 
-            <div class="field pat-field">
-              <label class="field__label" for="pat-input">Fine-grained Personal Access Token</label>
+            <!-- Tab 1: 1-Click Device Flow -->
+            <div id="auth-panel-device" class="auth-panel">
+              <p class="auth-panel__desc">Connect securely without copying or creating tokens manually.</p>
+              
+              <div id="device-flow-idle">
+                <button id="device-connect-btn" class="btn btn--primary btn--full" type="button">
+                  <span>Connect with GitHub</span>
+                </button>
+              </div>
+
+              <div id="device-flow-active" class="device-flow-box hidden">
+                <p class="device-flow-box__instruction">Enter this code on GitHub to authorize Legit:</p>
+                <div class="device-code-display">
+                  <span id="device-user-code" class="device-user-code">---- ----</span>
+                  <button id="copy-device-code-btn" class="btn btn--ghost btn--sm" type="button">Copy</button>
+                </div>
+                <div class="device-flow-actions">
+                  <a id="open-github-verify-link" href="https://github.com/login/device" target="_blank" rel="noopener noreferrer" class="btn btn--primary btn--authorize">
+                    <span>Open GitHub &amp; Authorize ↗</span>
+                  </a>
+                  <button id="cancel-device-btn" class="btn btn--ghost btn--sm" type="button">Cancel</button>
+                </div>
+                <div class="device-flow-status">
+                  <span class="spinner" aria-hidden="true"></span>
+                  <span id="device-status-text">Waiting for GitHub authorization…</span>
+                </div>
+              </div>
+
+              <div id="device-error" class="connect-error hidden"></div>
+            </div>
+
+            <!-- Tab 2: Manual PAT -->
+            <div id="auth-panel-pat" class="auth-panel hidden">
+              <div class="pat-instructions">
+                <p class="pat-instructions__title">How to connect with Personal Access Token</p>
+                <ol class="pat-instructions__steps">
+                  <li>
+                    <a
+                      href="https://github.com/settings/tokens/new?scopes=repo&description=Legit+LeetCode+Sync"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="pat-instructions__link"
+                    >Open Pre-configured GitHub Token Page ↗</a>
+                  </li>
+                  <li>Click <strong>Generate token</strong> at the bottom of the page</li>
+                  <li>Copy and paste your token below</li>
+                </ol>
+              </div>
+
+              <div class="field pat-field">
+                <label class="field__label" for="pat-input">Personal Access Token (PAT)</label>
+                <div class="pat-field__row">
+                  <input
+                    id="pat-input"
+                    class="field__input"
+                    type="password"
+                    placeholder="ghp_… or github_pat_…"
+                    autocomplete="off"
+                    spellcheck="false"
+                  />
+                  <button id="pat-toggle" class="btn btn--ghost btn--sm" type="button" aria-label="Show token">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                      <path d="M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2Zm0 1.5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9ZM8 6a2 2 0 1 0 0 4A2 2 0 0 0 8 6Z"/>
+                    </svg>
+                  </button>
+                </div>
+                <p class="field__hint">Your token is stored locally and never sent outside of GitHub API calls.</p>
+              </div>
+
+              <div id="connect-error" class="connect-error hidden"></div>
+
+              <button id="connect-btn" class="btn btn--primary connect-btn" type="button">
+                <span id="connect-btn-text">Verify &amp; Connect</span>
+                <span id="connect-spinner" class="spinner hidden" aria-hidden="true"></span>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ── AI Complexity & Approach Analysis (Optional) ──────────────── -->
+        <section class="card" id="section-ai">
+          <div class="card__header-row">
+            <div>
+              <h2 class="card__title">AI Complexity Analysis (Optional)</h2>
+              <p class="card__subtitle">Automatically extract Big-O Time/Space complexity and approach intuition for your READMEs.</p>
+            </div>
+          </div>
+
+          <div class="toggle-row">
+            <div>
+              <p class="toggle-row__label">Enable AI Analysis</p>
+              <p class="toggle-row__desc">Analyze submitted code before pushing to GitHub.</p>
+            </div>
+            <label class="toggle" for="ai-enabled-toggle">
+              <input type="checkbox" id="ai-enabled-toggle" />
+              <span class="toggle__track"></span>
+            </label>
+          </div>
+
+          <div id="ai-settings-container" class="ai-settings-fields hidden">
+            <div class="field">
+              <label class="field__label" for="ai-provider-select">AI Provider</label>
+              <select id="ai-provider-select" class="field__select">
+                <option value="gemini">Google Gemini (Recommended &bull; Generous Free Tier)</option>
+                <option value="groq">Groq (Ultra-Fast &bull; Free Tier)</option>
+                <option value="openai">OpenAI (ChatGPT)</option>
+                <option value="anthropic">Anthropic (Claude)</option>
+                <option value="openrouter">OpenRouter</option>
+                <option value="custom">Custom / Local (Ollama &bull; OpenAI Compatible)</option>
+              </select>
+            </div>
+
+            <div class="field" id="ai-endpoint-field">
+              <label class="field__label" for="ai-endpoint-input">Custom API Endpoint URL</label>
+              <input
+                id="ai-endpoint-input"
+                class="field__input"
+                type="text"
+                placeholder="http://localhost:11434/v1/chat/completions"
+                autocomplete="off"
+              />
+              <p class="field__hint">Any OpenAI-compatible chat completion endpoint.</p>
+            </div>
+
+            <div class="field">
+              <label class="field__label" for="ai-model-input">Model Name</label>
+              <input
+                id="ai-model-input"
+                class="field__input"
+                type="text"
+                placeholder="gemini-1.5-flash"
+                autocomplete="off"
+              />
+              <p id="ai-model-hint" class="field__hint">Default model for Google Gemini: gemini-1.5-flash</p>
+            </div>
+
+            <div class="field">
+              <label class="field__label" for="ai-key-input">API Key</label>
               <div class="pat-field__row">
                 <input
-                  id="pat-input"
+                  id="ai-key-input"
                   class="field__input"
                   type="password"
-                  placeholder="github_pat_…"
+                  placeholder="Enter your API key…"
                   autocomplete="off"
                   spellcheck="false"
                 />
-                <button id="pat-toggle" class="btn btn--ghost btn--sm" type="button" aria-label="Show token">
+                <button id="ai-key-toggle" class="btn btn--ghost btn--sm" type="button" aria-label="Show API key">
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
                     <path d="M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2Zm0 1.5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9ZM8 6a2 2 0 1 0 0 4A2 2 0 0 0 8 6Z"/>
                   </svg>
                 </button>
               </div>
-              <p class="field__hint">Your token is stored locally and never sent outside of GitHub API calls.</p>
+              <p class="field__hint">Stored strictly in local browser storage. Direct connection with 0 intermediary servers.</p>
             </div>
 
-            <div id="connect-error" class="connect-error hidden"></div>
-
-            <button id="connect-btn" class="btn btn--primary connect-btn">
-              <span id="connect-btn-text">Verify &amp; Connect</span>
-              <span id="connect-spinner" class="spinner hidden" aria-hidden="true"></span>
-            </button>
+            <div class="ai-actions-row">
+              <button id="test-ai-btn" class="btn btn--secondary btn--sm" type="button">
+                <span id="test-ai-btn-text">Test AI Connection</span>
+                <span id="test-ai-spinner" class="spinner hidden" aria-hidden="true"></span>
+              </button>
+              <span id="test-ai-status" class="ai-test-status hidden"></span>
+            </div>
           </div>
         </section>
 
