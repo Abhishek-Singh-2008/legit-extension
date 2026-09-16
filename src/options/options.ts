@@ -9,12 +9,14 @@
 //   - No hardcoded GitHub owner, repo, or branch values.
 
 import { logger } from "@/utils/logger";
-import type { ExtensionSettings, FolderFormat, SyncHistoryRecord, SyncStats } from "@/types/settings";
+import type { ExtensionSettings, FolderFormat, SyncHistoryRecord, SyncStats, AIProvider } from "@/types/settings";
 import type { ConnectionStatus } from "@/storage/storage";
 import type { GitHubRepository, GitHubBranch } from "@/types/github";
+import { DEFAULT_AI_MODELS } from "@/ai/ai-client";
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let cachedHistory: SyncHistoryRecord[] = [];
+let devicePollTimer: number | null = null;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -70,6 +72,27 @@ function populateForm(s: Partial<ExtensionSettings>): void {
   ($<HTMLInputElement>("auto-sync")).checked = s.autoSync ?? true;
   ($<HTMLInputElement>("gen-readme")).checked = s.generateReadme ?? true;
   ($<HTMLInputElement>("notifications")).checked = s.notifications ?? true;
+
+  // AI settings
+  const aiEnabled = s.aiEnabled ?? false;
+  const aiEnabledToggle = $<HTMLInputElement>("ai-enabled-toggle");
+  aiEnabledToggle.checked = aiEnabled;
+  toggleAiContainer(aiEnabled);
+
+  const provider = (s.aiProvider ?? "gemini") as AIProvider;
+  const providerSelect = $<HTMLSelectElement>("ai-provider-select");
+  providerSelect.value = provider;
+  updateProviderUI(provider);
+
+  if (s.aiModel) {
+    ($<HTMLInputElement>("ai-model-input")).value = s.aiModel;
+  }
+  if (s.aiCustomEndpoint) {
+    ($<HTMLInputElement>("ai-endpoint-input")).value = s.aiCustomEndpoint;
+  }
+  if (s.aiApiKey) {
+    ($<HTMLInputElement>("ai-key-input")).value = s.aiApiKey;
+  }
 }
 
 // ── Dashboard & Sync History (Phase 10) ───────────────────────────────────────
@@ -350,13 +373,29 @@ async function loadBranches(repoFullName: string, preselectBranch?: string): Pro
 // ── Events ────────────────────────────────────────────────────────────────────
 
 function bindEvents(): void {
+  // Auth Tabs
+  $("tab-btn-device").addEventListener("click", () => switchAuthTab("device"));
+  $("tab-btn-pat").addEventListener("click", () => switchAuthTab("pat"));
+
+  // 1-Click Device Flow
+  $("device-connect-btn").addEventListener("click", handleStartDeviceFlow);
+  $("cancel-device-btn").addEventListener("click", handleCancelDeviceFlow);
+  $("copy-device-code-btn").addEventListener("click", () => {
+    const code = $("device-user-code").textContent || "";
+    navigator.clipboard.writeText(code);
+    $("copy-device-code-btn").textContent = "Copied!";
+    setTimeout(() => {
+      $("copy-device-code-btn").textContent = "Copy";
+    }, 2000);
+  });
+
   // Token toggle
   $("pat-toggle").addEventListener("click", () => {
     const input = $<HTMLInputElement>("pat-input");
     input.type = input.type === "password" ? "text" : "password";
   });
 
-  // Connect & Enter key
+  // Connect & Enter key (PAT)
   $("connect-btn").addEventListener("click", handleConnect);
   $<HTMLInputElement>("pat-input").addEventListener("keydown", (e) => {
     if (e.key === "Enter") handleConnect();
@@ -364,6 +403,27 @@ function bindEvents(): void {
 
   // Disconnect
   $("disconnect-btn").addEventListener("click", handleDisconnect);
+
+  // AI Analysis Toggle
+  $<HTMLInputElement>("ai-enabled-toggle").addEventListener("change", (e) => {
+    const enabled = (e.target as HTMLInputElement).checked;
+    toggleAiContainer(enabled);
+  });
+
+  // AI Provider Select
+  $<HTMLSelectElement>("ai-provider-select").addEventListener("change", (e) => {
+    const provider = (e.target as HTMLSelectElement).value as AIProvider;
+    updateProviderUI(provider);
+  });
+
+  // AI Key toggle
+  $("ai-key-toggle").addEventListener("click", () => {
+    const input = $<HTMLInputElement>("ai-key-input");
+    input.type = input.type === "password" ? "text" : "password";
+  });
+
+  // Test AI Key Button
+  $("test-ai-btn").addEventListener("click", handleTestAi);
 
   // Repo select change
   $<HTMLSelectElement>("repo-select").addEventListener("change", async (e) => {
@@ -421,7 +481,194 @@ function bindEvents(): void {
   });
 }
 
-// ── Connect / Disconnect ──────────────────────────────────────────────────────
+// ── Auth Tabs & Device Flow ───────────────────────────────────────────────────
+
+function switchAuthTab(tab: "device" | "pat"): void {
+  const deviceBtn = $("tab-btn-device");
+  const patBtn = $("tab-btn-pat");
+  const devicePanel = $("auth-panel-device");
+  const patPanel = $("auth-panel-pat");
+
+  if (tab === "device") {
+    deviceBtn.classList.add("active");
+    patBtn.classList.remove("active");
+    devicePanel.classList.remove("hidden");
+    patPanel.classList.add("hidden");
+  } else {
+    patBtn.classList.add("active");
+    deviceBtn.classList.remove("active");
+    patPanel.classList.remove("hidden");
+    devicePanel.classList.add("hidden");
+  }
+}
+
+async function handleStartDeviceFlow(): Promise<void> {
+  const errorEl = $("device-error");
+  errorEl.classList.add("hidden");
+  errorEl.textContent = "";
+
+  const idleBox = $("device-flow-idle");
+  const activeBox = $("device-flow-active");
+
+  idleBox.classList.add("hidden");
+  activeBox.classList.remove("hidden");
+  $("device-status-text").textContent = "Requesting code from GitHub…";
+
+  try {
+    const res = await chrome.runtime.sendMessage({ type: "START_DEVICE_FLOW" });
+    if (!res?.ok || !res.data) {
+      throw new Error(res?.error || "Failed to initiate Device Flow.");
+    }
+
+    const { device_code, user_code, verification_uri, interval } = res.data;
+
+    $("device-user-code").textContent = user_code;
+    ($<HTMLAnchorElement>("open-github-verify-link")).href = verification_uri;
+    $("device-status-text").textContent = "Waiting for authorization on GitHub…";
+
+    // Start polling
+    startDevicePolling(device_code, (interval || 5) * 1000);
+  } catch (err) {
+    logger.error("Device flow start error:", err);
+    errorEl.textContent = err instanceof Error ? err.message : "Failed to start Device Flow.";
+    errorEl.classList.remove("hidden");
+    idleBox.classList.remove("hidden");
+    activeBox.classList.add("hidden");
+  }
+}
+
+function startDevicePolling(deviceCode: string, intervalMs: number): void {
+  if (devicePollTimer) clearInterval(devicePollTimer);
+
+  devicePollTimer = window.setInterval(async () => {
+    try {
+      const res = await chrome.runtime.sendMessage({
+        type: "POLL_DEVICE_FLOW",
+        deviceCode,
+      });
+
+      if (!res?.ok) {
+        handleCancelDeviceFlow();
+        showDeviceError(res?.error || "Device flow error.");
+        return;
+      }
+
+      const data = res.data;
+      if (data.status === "success") {
+        if (devicePollTimer) clearInterval(devicePollTimer);
+        devicePollTimer = null;
+
+        const status: ConnectionStatus = {
+          connected: true,
+          username: data.login,
+          avatarUrl: data.avatarUrl,
+        };
+        renderAccount(status);
+        await loadRepos(status);
+        showSaveStatus("Connected to GitHub ✓");
+      } else if (data.status === "slow_down" && data.newInterval) {
+        // Adjust polling interval
+        startDevicePolling(deviceCode, data.newInterval * 1000);
+      } else if (data.status === "expired" || data.status === "denied" || data.status === "error") {
+        handleCancelDeviceFlow();
+        showDeviceError(data.error || "Authorization was cancelled or expired.");
+      }
+    } catch (err) {
+      logger.error("Device flow polling error:", err);
+    }
+  }, intervalMs);
+}
+
+function handleCancelDeviceFlow(): void {
+  if (devicePollTimer) {
+    clearInterval(devicePollTimer);
+    devicePollTimer = null;
+  }
+  $("device-flow-idle").classList.remove("hidden");
+  $("device-flow-active").classList.add("hidden");
+}
+
+function showDeviceError(msg: string): void {
+  const errorEl = $("device-error");
+  errorEl.textContent = msg;
+  errorEl.classList.remove("hidden");
+}
+
+// ── AI Settings UI Helpers ────────────────────────────────────────────────────
+
+function toggleAiContainer(show: boolean): void {
+  const container = $("ai-settings-container");
+  container.classList.toggle("hidden", !show);
+}
+
+function updateProviderUI(provider: AIProvider): void {
+  const defaultModel = DEFAULT_AI_MODELS[provider] || "default";
+  const modelInput = $<HTMLInputElement>("ai-model-input");
+  const modelHint = $("ai-model-hint");
+  const endpointField = $("ai-endpoint-field");
+
+  modelInput.placeholder = defaultModel;
+  modelHint.textContent = `Default model for ${provider}: ${defaultModel}`;
+
+  if (provider === "custom") {
+    endpointField.classList.remove("hidden");
+  } else {
+    endpointField.classList.add("hidden");
+  }
+}
+
+async function handleTestAi(): Promise<void> {
+  const provider = ($<HTMLSelectElement>("ai-provider-select")).value as AIProvider;
+  const apiKey = ($<HTMLInputElement>("ai-key-input")).value.trim();
+  const model = ($<HTMLInputElement>("ai-model-input")).value.trim();
+  const customEndpoint = ($<HTMLInputElement>("ai-endpoint-input")).value.trim();
+
+  const statusEl = $("test-ai-status");
+  const btnText = $("test-ai-btn-text");
+  const spinner = $("test-ai-spinner");
+  const btn = $<HTMLButtonElement>("test-ai-btn");
+
+  if (!apiKey && provider !== "custom") {
+    statusEl.textContent = "Please enter an API key to test.";
+    statusEl.className = "ai-test-status ai-test-status--error";
+    statusEl.classList.remove("hidden");
+    return;
+  }
+
+  btn.disabled = true;
+  btnText.textContent = "Testing…";
+  spinner.classList.remove("hidden");
+  statusEl.classList.add("hidden");
+
+  try {
+    const res = await chrome.runtime.sendMessage({
+      type: "TEST_AI_KEY",
+      provider,
+      apiKey,
+      model: model || undefined,
+      customEndpoint: customEndpoint || undefined,
+    });
+
+    if (res?.ok) {
+      statusEl.textContent = "Connection successful ✓";
+      statusEl.className = "ai-test-status ai-test-status--success";
+    } else {
+      statusEl.textContent = res?.error || "Connection failed";
+      statusEl.className = "ai-test-status ai-test-status--error";
+    }
+    statusEl.classList.remove("hidden");
+  } catch (err) {
+    statusEl.textContent = err instanceof Error ? err.message : "Test failed";
+    statusEl.className = "ai-test-status ai-test-status--error";
+    statusEl.classList.remove("hidden");
+  } finally {
+    btn.disabled = false;
+    btnText.textContent = "Test AI Connection";
+    spinner.classList.add("hidden");
+  }
+}
+
+// ── Connect / Disconnect (PAT) ────────────────────────────────────────────────
 
 async function handleConnect(): Promise<void> {
   const patInput = $<HTMLInputElement>("pat-input");
@@ -592,6 +839,10 @@ async function saveGeneralSettings(): Promise<void> {
   btn.disabled = true;
   btn.textContent = "Saving…";
 
+  const aiApiKeyInput = $<HTMLInputElement>("ai-key-input").value.trim();
+  const aiModelInput = $<HTMLInputElement>("ai-model-input").value.trim();
+  const aiEndpointInput = $<HTMLInputElement>("ai-endpoint-input").value.trim();
+
   const settings: Partial<ExtensionSettings> = {
     baseDirectory: ($<HTMLInputElement>("basedir-input")).value.trim() || "algorithms",
     folderFormat: ($<HTMLSelectElement>("folder-format")).value as FolderFormat,
@@ -601,6 +852,11 @@ async function saveGeneralSettings(): Promise<void> {
     autoSync: ($<HTMLInputElement>("auto-sync")).checked,
     generateReadme: ($<HTMLInputElement>("gen-readme")).checked,
     notifications: ($<HTMLInputElement>("notifications")).checked,
+    aiEnabled: ($<HTMLInputElement>("ai-enabled-toggle")).checked,
+    aiProvider: ($<HTMLSelectElement>("ai-provider-select")).value as AIProvider,
+    aiApiKey: aiApiKeyInput || undefined,
+    aiModel: aiModelInput || undefined,
+    aiCustomEndpoint: aiEndpointInput || undefined,
   };
 
   try {
