@@ -23,6 +23,8 @@ import {
   loadSyncStats,
 } from "@/storage/storage";
 import { verifyToken, verifyRepoAccess, GitHubAuthError } from "@/github/github-auth";
+import { requestDeviceCode, pollDeviceToken } from "@/github/github-device-flow";
+import { testAiConnection } from "@/ai/ai-client";
 import { GitHubApiClientImpl } from "@/github/github-api";
 import { pushSubmissionToGitHub } from "@/github/github-push";
 import { sha256 } from "@/utils/hash";
@@ -34,6 +36,7 @@ import {
   GitHubApiError,
 } from "@/utils/errors";
 import type { LeetCodeProblem } from "@/types/leetcode";
+import type { AIProvider } from "@/types/settings";
 
 // ── Message Types ─────────────────────────────────────────────────────────────
 
@@ -45,6 +48,9 @@ export type BackgroundMessage =
   | { type: "GET_CONNECTION_STATUS" }
   | { type: "SAVE_SETTINGS"; settings: Partial<import("@/types/settings").ExtensionSettings> }
   | { type: "CONNECT_GITHUB"; token: string }
+  | { type: "START_DEVICE_FLOW"; clientId?: string }
+  | { type: "POLL_DEVICE_FLOW"; deviceCode: string; clientId?: string }
+  | { type: "TEST_AI_KEY"; provider: AIProvider; apiKey: string; model?: string; customEndpoint?: string }
   | { type: "DISCONNECT_GITHUB" }
   | { type: "GET_USER_REPOS" }
   | { type: "GET_REPO_BRANCHES"; repo: string }
@@ -168,6 +174,56 @@ async function handleMessage(
           avatarUrl: user.avatarUrl,
         },
       };
+    }
+
+    case "START_DEVICE_FLOW": {
+      logger.info("[Auth] Initiating GitHub Device Flow...");
+      try {
+        const deviceData = await requestDeviceCode(message.clientId);
+        return { ok: true, data: deviceData };
+      } catch (err) {
+        logger.error("[Auth] Device Flow init error:", getErrorMessage(err));
+        return { ok: false, error: getErrorMessage(err) };
+      }
+    }
+
+    case "POLL_DEVICE_FLOW": {
+      const { deviceCode, clientId } = message;
+      try {
+        const pollRes = await pollDeviceToken(deviceCode, clientId);
+        if (pollRes.status === "success") {
+          const user = await verifyToken(pollRes.accessToken);
+          await saveAuthCredentials(pollRes.accessToken, user.login, user.avatarUrl);
+          logger.info(`[Auth] Device Flow Connected: @${user.login}`);
+          return {
+            ok: true,
+            data: {
+              status: "success",
+              login: user.login,
+              name: user.name,
+              avatarUrl: user.avatarUrl,
+            },
+          };
+        }
+        return { ok: true, data: pollRes };
+      } catch (err) {
+        logger.error("[Auth] Device Flow poll error:", getErrorMessage(err));
+        return { ok: false, error: getErrorMessage(err) };
+      }
+    }
+
+    case "TEST_AI_KEY": {
+      logger.info(`[AI] Testing API key for provider ${message.provider}...`);
+      const testResult = await testAiConnection({
+        provider: message.provider,
+        apiKey: message.apiKey,
+        model: message.model,
+        customEndpoint: message.customEndpoint,
+      });
+      if (testResult.ok) {
+        return { ok: true };
+      }
+      return { ok: false, error: testResult.error || "Failed to connect to AI provider" };
     }
 
     case "DISCONNECT_GITHUB": {

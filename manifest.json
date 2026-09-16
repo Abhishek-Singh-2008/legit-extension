@@ -45,7 +45,12 @@
   "host_permissions": [
     "https://leetcode.com/*",
     "https://api.github.com/*",
-    "https://github.com/*"
+    "https://github.com/*",
+    "https://generativelanguage.googleapis.com/*",
+    "https://api.groq.com/*",
+    "https://api.openai.com/*",
+    "https://api.anthropic.com/*",
+    "https://openrouter.ai/*"
   ],
 
   "web_accessible_resources": [

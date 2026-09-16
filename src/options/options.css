@@ -766,3 +766,164 @@ body {
   word-break: break-word;
 }
 
+/* ── Auth Tabs ─────────────────────────────────────────────────────────────── */
+.auth-tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+}
+
+.auth-tab-btn {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.auth-tab-btn:hover {
+  color: var(--color-text);
+  background: var(--color-surface-2);
+}
+
+.auth-tab-btn.active {
+  color: var(--color-text);
+  background: var(--color-surface-2);
+  font-weight: 600;
+}
+
+.auth-panel__desc {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  margin-bottom: 14px;
+}
+
+/* ── Device Flow ───────────────────────────────────────────────────────────── */
+.btn--full {
+  width: 100%;
+  justify-content: center;
+}
+
+.device-flow-box {
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.device-flow-box__instruction {
+  font-size: 13px;
+  color: var(--color-text);
+  font-weight: 500;
+}
+
+.device-code-display {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 8px 14px;
+}
+
+.device-user-code {
+  font-family: monospace;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: #58a6ff;
+}
+
+.device-flow-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.btn--authorize {
+  padding: 10px 22px;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(35, 134, 54, 0.35);
+  transition: all var(--transition);
+}
+
+.btn--authorize:hover {
+  background: var(--color-accent-hover);
+  box-shadow: 0 4px 12px rgba(35, 134, 54, 0.5);
+  transform: translateY(-1px);
+}
+
+.device-flow-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+/* ── AI Complexity Settings ────────────────────────────────────────────────── */
+.card__subtitle {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-top: 4px;
+}
+
+.ai-settings-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border);
+}
+
+.ai-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.btn--secondary {
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+}
+
+.btn--secondary:hover:not(:disabled) {
+  background: #30363d;
+}
+
+.ai-test-status {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.ai-test-status--success {
+  color: var(--color-success);
+}
+
+.ai-test-status--error {
+  color: var(--color-danger);
+}
+

@@ -24,8 +24,26 @@ export interface ExtensionSettings {
   // Deduplication
   recentSubmissionHashes: string[]; // up to last 100
 
+  // AI Complexity & Approach Analysis
+  aiEnabled: boolean;
+  aiProvider: AIProvider;
+  aiApiKey?: string;
+  aiModel?: string;
+  aiCustomEndpoint?: string;
+
   // Last sync
   lastSync?: LastSyncRecord;
+}
+
+export type AIProvider = "gemini" | "groq" | "openai" | "anthropic" | "openrouter" | "custom";
+
+export interface AIAnalysisResult {
+  approach: string;
+  timeComplexity: string;
+  timeReason: string;
+  spaceComplexity: string;
+  spaceReason: string;
+  error?: string;
 }
 
 export type FolderFormat = "{slug}" | "{difficulty}/{slug}" | "{slug}/{language}";
@@ -90,4 +108,6 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
   notifications: true,
   commitMessageFormat: "feat: add {title} solution",
   recentSubmissionHashes: [],
+  aiEnabled: false,
+  aiProvider: "gemini",
 };
