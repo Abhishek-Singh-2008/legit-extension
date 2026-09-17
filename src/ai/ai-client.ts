@@ -23,7 +23,7 @@ export interface TestAiConnectionParams {
 }
 
 export const DEFAULT_AI_MODELS: Record<AIProvider, string> = {
-  gemini: "gemini-1.5-flash",
+  gemini: "gemini-2.0-flash",
   groq: "llama-3.3-70b-versatile",
   openai: "gpt-4o-mini",
   anthropic: "claude-3-5-haiku-20241022",
@@ -235,41 +235,77 @@ async function callGemini(
   userPrompt: string,
   signal: AbortSignal
 ): Promise<string> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
-    model
-  )}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const candidateModels = [
+    model,
+    "gemini-2.0-flash",
+    "gemini-1.5-flash-latest",
+    "gemini-2.5-flash",
+    "gemini-1.5-flash",
+  ];
+  const uniqueModels = Array.from(new Set(candidateModels.filter(Boolean)));
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      systemInstruction: {
-        parts: [{ text: SYSTEM_PROMPT }],
-      },
-      contents: [
-        {
-          role: "user",
-          parts: [{ text: userPrompt }],
-        },
-      ],
-      generationConfig: {
-        responseMimeType: "application/json",
-        temperature: 0.1,
-      },
-    }),
-    signal,
-  });
+  let lastError: Error | null = null;
 
-  if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    const message = (errorData as { error?: { message?: string } })?.error?.message || `HTTP ${res.status} ${res.statusText}`;
-    throw new Error(`Gemini API Error: ${message}`);
+  for (const m of uniqueModels) {
+    if (signal.aborted) break;
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+      m
+    )}:generateContent?key=${encodeURIComponent(apiKey.trim())}`;
+
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          systemInstruction: {
+            parts: [{ text: SYSTEM_PROMPT }],
+          },
+          contents: [
+            {
+              role: "user",
+              parts: [{ text: userPrompt }],
+            },
+          ],
+          generationConfig: {
+            responseMimeType: "application/json",
+            temperature: 0.1,
+          },
+        }),
+        signal,
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        const message =
+          (errorData as { error?: { message?: string } })?.error?.message ||
+          `HTTP ${res.status} ${res.statusText}`;
+
+        // If it's a 404 / model not found, try the next candidate model
+        if (res.status === 404 || message.includes("not found") || message.includes("not supported")) {
+          lastError = new Error(`Gemini API Error (${m}): ${message}`);
+          continue;
+        }
+
+        throw new Error(`Gemini API Error: ${message}`);
+      }
+
+      const data = await res.json();
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!text) throw new Error("Empty response from Gemini API");
+      return text;
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") throw err;
+      lastError = err instanceof Error ? err : new Error(String(err));
+      // If error indicates not found, continue to next model candidate
+      if (lastError.message.includes("not found") || lastError.message.includes("404")) {
+        continue;
+      }
+      throw lastError;
+    }
   }
 
-  const data = await res.json();
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error("Empty response from Gemini API");
-  return text;
+  throw lastError || new Error("Failed to execute Gemini API request across candidate models.");
 }
 
 async function callOpenAICompatible(
