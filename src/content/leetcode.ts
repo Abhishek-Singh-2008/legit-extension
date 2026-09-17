@@ -42,6 +42,9 @@ const navObserver = new MutationObserver(() => {
 
 navObserver.observe(document.body, { childList: true, subtree: true });
 
+// Run initial detection immediately on load
+runDetection();
+
 // ── Problem Detection ─────────────────────────────────────────────────────────
 
 function runDetection(): void {
