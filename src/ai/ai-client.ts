@@ -262,20 +262,73 @@ async function callGemini(
 ): Promise<string> {
   const cleanKey = apiKey.trim();
   let requestedModel = (model || "").trim().replace(/^models\//, "");
-  if (!requestedModel || /\s/.test(requestedModel) || requestedModel.includes("tts") || requestedModel.includes("audio")) {
+  if (
+    !requestedModel ||
+    /\s/.test(requestedModel) ||
+    requestedModel.includes("tts") ||
+    requestedModel.includes("audio")
+  ) {
     requestedModel = "gemini-2.0-flash";
   }
 
-  // Prioritize standard text generation models (excluding audio/TTS/embed variants)
-  const candidateModels = [
+  // 1. Start with high-priority standard text models
+  let candidateModels: string[] = [
     requestedModel,
     "gemini-2.0-flash",
-    "gemini-1.5-flash",
     "gemini-1.5-flash-latest",
+    "gemini-1.5-flash-002",
+    "gemini-1.5-flash-001",
+    "gemini-1.5-flash",
     "gemini-2.5-flash",
+    "gemini-2.0-flash-exp",
+    "gemini-1.5-pro-latest",
     "gemini-1.5-pro",
-    "gemini-pro",
   ];
+
+  // 2. Dynamically query user's actual available models to ensure exact matches
+  try {
+    const listRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(cleanKey)}`,
+      {
+        headers: { "x-goog-api-key": cleanKey },
+        signal,
+      }
+    );
+    if (listRes.ok) {
+      const listData = (await listRes.json()) as {
+        models?: Array<{ name: string; supportedGenerationMethods?: string[] }>;
+      };
+      if (Array.isArray(listData.models) && listData.models.length > 0) {
+        const textModels = listData.models
+          .filter((m) => {
+            const name = (m.name || "").toLowerCase();
+            const isGen = m.supportedGenerationMethods?.includes("generateContent");
+            const isNonText =
+              name.includes("tts") ||
+              name.includes("audio") ||
+              name.includes("embed") ||
+              name.includes("imagen") ||
+              name.includes("aqa") ||
+              name.includes("robotics");
+            return isGen && !isNonText;
+          })
+          .map((m) => m.name.replace(/^models\//, ""));
+
+        if (textModels.length > 0) {
+          // Sort flash models to the top
+          textModels.sort((a, b) => {
+            const aFlash = a.includes("flash") ? -1 : 1;
+            const bFlash = b.includes("flash") ? -1 : 1;
+            return aFlash - bFlash;
+          });
+
+          candidateModels = Array.from(new Set([requestedModel, ...textModels, ...candidateModels]));
+        }
+      }
+    }
+  } catch {
+    // Continue with static candidate models if list endpoint is unreachable
+  }
 
   const uniqueModels = Array.from(new Set(candidateModels.filter(Boolean)));
   let lastError: Error | null = null;
@@ -283,72 +336,71 @@ async function callGemini(
   for (const m of uniqueModels) {
     if (signal.aborted) break;
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
-      m
-    )}:generateContent?key=${encodeURIComponent(cleanKey)}`;
+    // Try v1beta first, then v1
+    const apiVersions = ["v1beta", "v1"];
+    for (const apiVer of apiVersions) {
+      if (signal.aborted) break;
 
-    try {
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": cleanKey,
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              role: "user",
-              parts: [{ text: `${SYSTEM_PROMPT}\n\n${userPrompt}` }],
-            },
-          ],
-          generationConfig: {
-            temperature: 0.1,
+      const url = `https://generativelanguage.googleapis.com/${apiVer}/models/${encodeURIComponent(
+        m
+      )}:generateContent?key=${encodeURIComponent(cleanKey)}`;
+
+      try {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": cleanKey,
           },
-        }),
-        signal,
-      });
+          body: JSON.stringify({
+            contents: [
+              {
+                role: "user",
+                parts: [{ text: `${SYSTEM_PROMPT}\n\n${userPrompt}` }],
+              },
+            ],
+            generationConfig: {
+              temperature: 0.1,
+            },
+          }),
+          signal,
+        });
 
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        const message =
-          (errorData as { error?: { message?: string } })?.error?.message ||
-          `HTTP ${res.status} ${res.statusText}`;
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}));
+          const message =
+            (errorData as { error?: { message?: string } })?.error?.message ||
+            `HTTP ${res.status} ${res.statusText}`;
 
-        // If it's 404, 429, quota exceeded, or unsupported, try the next standard text model
-        if (
-          res.status === 404 ||
-          res.status === 429 ||
-          message.includes("not found") ||
-          message.includes("not supported") ||
-          message.includes("quota") ||
-          message.includes("Quota") ||
-          message.includes("exceeded") ||
-          message.includes("rate")
-        ) {
-          lastError = new Error(`Gemini API (${m}): ${message}`);
-          continue;
+          lastError = new Error(`Gemini API (${m} on ${apiVer}): ${message}`);
+
+          // If not found, rate-limited, or quota-exceeded, try next version / model
+          if (
+            res.status === 404 ||
+            res.status === 400 ||
+            res.status === 429 ||
+            message.includes("not found") ||
+            message.includes("not supported") ||
+            message.includes("quota") ||
+            message.includes("Quota") ||
+            message.includes("exceeded") ||
+            message.includes("rate")
+          ) {
+            continue;
+          }
+
+          break; // For other errors, move to next model
         }
 
-        throw new Error(`Gemini API Error: ${message}`);
-      }
-
-      const data = await res.json();
-      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!text) throw new Error("Empty response from Gemini API");
-      return text;
-    } catch (err) {
-      if (err instanceof DOMException && err.name === "AbortError") throw err;
-      lastError = err instanceof Error ? err : new Error(String(err));
-      if (
-        lastError.message.includes("not found") ||
-        lastError.message.includes("404") ||
-        lastError.message.includes("quota") ||
-        lastError.message.includes("Quota") ||
-        lastError.message.includes("429")
-      ) {
+        const data = await res.json();
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!text) throw new Error("Empty response from Gemini API");
+        return text;
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") throw err;
+        lastError = err instanceof Error ? err : new Error(String(err));
         continue;
       }
-      throw lastError;
     }
   }
 
