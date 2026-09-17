@@ -10,7 +10,7 @@ import { logger } from "@/utils/logger";
 import { slugFromUrl } from "@/utils/slugify";
 import { getCurrentProblem } from "@/content/problem-detector";
 import { watchSubmissionResult } from "@/content/submission-detector";
-import { fetchAcceptedCode } from "@/content/leetcode-api";
+import { fetchAcceptedCode, fetchQuestionDifficulty } from "@/content/leetcode-api";
 import { MonacoCodeExtractor, getCurrentLanguage } from "@/content/code-extractor";
 import type { LeetCodeProblem, LeetCodeSubmission, SubmissionStatus } from "@/types/leetcode";
 
@@ -82,6 +82,16 @@ function runDetection(): void {
   logger.info(`  URL:        ${problem.url}`);
 
   sendProblemDetected(problem);
+
+  // If DOM gave Unknown difficulty, resolve asynchronously via GraphQL
+  if (problem.difficulty === "Unknown") {
+    fetchQuestionDifficulty(problem.slug).then((d) => {
+      if (d && d !== "Unknown") {
+        problem.difficulty = d;
+        sendProblemDetected(problem);
+      }
+    });
+  }
 }
 
 function sendProblemDetected(problem: LeetCodeProblem | null): void {
@@ -114,7 +124,13 @@ watchSubmissionResult({
         return;
       }
 
-      logger.info(`[LCSync] Accepted: ${problem.title}`);
+      // Ensure accurate difficulty
+      if (problem.difficulty === "Unknown") {
+        const gqlDiff = await fetchQuestionDifficulty(problem.slug);
+        if (gqlDiff) problem.difficulty = gqlDiff;
+      }
+
+      logger.info(`[LCSync] Accepted: ${problem.title} (${problem.difficulty})`);
       
       // 1. Try direct Monaco editor extraction for real-time code and comments
       const monacoExtractor = new MonacoCodeExtractor();

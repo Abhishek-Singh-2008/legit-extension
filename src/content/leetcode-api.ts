@@ -244,3 +244,29 @@ export async function fetchAcceptedCode(slug: string): Promise<{
 
   return { code: detail.code, language: detail.language };
 }
+
+const QUESTION_DIFFICULTY_QUERY = `
+  query questionTitle($titleSlug: String!) {
+    question(titleSlug: $titleSlug) {
+      difficulty
+      title
+    }
+  }
+`;
+
+/**
+ * Fetches accurate official difficulty directly from LeetCode GraphQL API.
+ */
+export async function fetchQuestionDifficulty(
+  slug: string
+): Promise<import("@/types/leetcode").Difficulty | null> {
+  try {
+    const data = await graphql<{
+      question?: { difficulty?: import("@/types/leetcode").Difficulty; title?: string };
+    }>(QUESTION_DIFFICULTY_QUERY, { titleSlug: slug });
+    return data.question?.difficulty ?? null;
+  } catch (err) {
+    logger.debug(`[LeetCodeAPI] Could not fetch difficulty via GraphQL:`, err);
+    return null;
+  }
+}
