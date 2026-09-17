@@ -608,7 +608,7 @@ function updateProviderUI(provider: AIProvider): void {
   const endpointField = $("ai-endpoint-field");
 
   modelInput.placeholder = defaultModel;
-  modelHint.textContent = `Default model for ${provider}: ${defaultModel}`;
+  modelHint.textContent = `Leave blank to use default model: ${defaultModel}`;
 
   if (provider === "custom") {
     endpointField.classList.remove("hidden");
