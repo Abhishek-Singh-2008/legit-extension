@@ -23,7 +23,7 @@ export interface TestAiConnectionParams {
 }
 
 export const DEFAULT_AI_MODELS: Record<AIProvider, string> = {
-  gemini: "gemini-1.5-flash",
+  gemini: "gemini-2.0-flash",
   groq: "llama-3.3-70b-versatile",
   openai: "gpt-4o-mini",
   anthropic: "claude-3-5-haiku-20241022",
@@ -72,7 +72,7 @@ export async function analyzeComplexity(
   const userPrompt = `Problem: ${title}\nLanguage: ${language}\n\nSubmitted Solution Code:\n\`\`\`${language}\n${code}\n\`\`\``;
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 6000);
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
 
   try {
     let rawResponse: string;
@@ -165,19 +165,44 @@ export async function testAiConnection(
     return { ok: false, error: "Please enter an API key to test." };
   }
 
+  const cleanKey = apiKey.trim();
   const testPrompt = "Respond with JSON: {\"status\":\"ok\"}";
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 7000);
+  const timeoutId = setTimeout(() => controller.abort(), 9000);
 
   try {
     switch (provider) {
-      case "gemini":
-        await callGemini(apiKey, model, testPrompt, controller.signal);
+      case "gemini": {
+        // Direct key validation via Google Gemini models service with header & param support
+        const testUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(cleanKey)}`;
+        try {
+          const res = await fetch(testUrl, {
+            method: "GET",
+            headers: {
+              "x-goog-api-key": cleanKey,
+            },
+            signal: controller.signal,
+          });
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            const errMsg =
+              (errData as { error?: { message?: string } })?.error?.message ||
+              `HTTP ${res.status} ${res.statusText}`;
+            throw new Error(`Gemini API Error: ${errMsg}`);
+          }
+        } catch (fetchErr) {
+          if (fetchErr instanceof DOMException && fetchErr.name === "AbortError") throw fetchErr;
+          if (fetchErr instanceof Error && fetchErr.message.includes("Gemini API Error")) throw fetchErr;
+          
+          // Fallback test via generateContent call if models listing is blocked
+          await callGemini(cleanKey, model, testPrompt, controller.signal);
+        }
         break;
+      }
       case "groq":
         await callOpenAICompatible(
           "https://api.groq.com/openai/v1/chat/completions",
-          apiKey,
+          cleanKey,
           model,
           testPrompt,
           controller.signal
@@ -186,19 +211,19 @@ export async function testAiConnection(
       case "openai":
         await callOpenAICompatible(
           "https://api.openai.com/v1/chat/completions",
-          apiKey,
+          cleanKey,
           model,
           testPrompt,
           controller.signal
         );
         break;
       case "anthropic":
-        await callAnthropic(apiKey, model, testPrompt, controller.signal);
+        await callAnthropic(cleanKey, model, testPrompt, controller.signal);
         break;
       case "openrouter":
         await callOpenAICompatible(
           "https://openrouter.ai/api/v1/chat/completions",
-          apiKey,
+          cleanKey,
           model,
           testPrompt,
           controller.signal
@@ -209,7 +234,7 @@ export async function testAiConnection(
         if (!endpoint.endsWith("/chat/completions") && !endpoint.includes("generate")) {
           endpoint = endpoint.replace(/\/+$/, "") + "/chat/completions";
         }
-        await callOpenAICompatible(endpoint, apiKey, model, testPrompt, controller.signal);
+        await callOpenAICompatible(endpoint, cleanKey, model, testPrompt, controller.signal);
         break;
       }
     }
@@ -219,7 +244,7 @@ export async function testAiConnection(
     clearTimeout(timeoutId);
     const isTimeout = err instanceof DOMException && err.name === "AbortError";
     const msg = isTimeout
-      ? "Connection timed out after 7s. Check endpoint or network."
+      ? "Connection timed out. Check your network connection."
       : err instanceof Error
         ? err.message
         : "Failed to connect to AI provider";
@@ -229,47 +254,162 @@ export async function testAiConnection(
 
 // ── Provider Call Implementations ──────────────────────────────────────────
 
+let cachedWorkingGeminiModel: string | null = null;
+
 async function callGemini(
   apiKey: string,
   model: string,
   userPrompt: string,
   signal: AbortSignal
 ): Promise<string> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
-    model
-  )}:generateContent?key=${encodeURIComponent(apiKey)}`;
-
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      systemInstruction: {
-        parts: [{ text: SYSTEM_PROMPT }],
-      },
-      contents: [
-        {
-          role: "user",
-          parts: [{ text: userPrompt }],
-        },
-      ],
-      generationConfig: {
-        responseMimeType: "application/json",
-        temperature: 0.1,
-      },
-    }),
-    signal,
-  });
-
-  if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    const message = (errorData as { error?: { message?: string } })?.error?.message || `HTTP ${res.status} ${res.statusText}`;
-    throw new Error(`Gemini API Error: ${message}`);
+  const cleanKey = apiKey.trim();
+  let requestedModel = (model || "").trim().replace(/^models\//, "");
+  if (
+    !requestedModel ||
+    /\s/.test(requestedModel) ||
+    requestedModel.includes("tts") ||
+    requestedModel.includes("audio")
+  ) {
+    requestedModel = cachedWorkingGeminiModel || "gemini-2.0-flash";
   }
 
-  const data = await res.json();
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error("Empty response from Gemini API");
-  return text;
+  // 1. Start with high-priority standard text models
+  let candidateModels: string[] = [
+    cachedWorkingGeminiModel,
+    requestedModel,
+    "gemini-2.0-flash",
+    "gemini-1.5-flash-latest",
+    "gemini-1.5-flash-002",
+    "gemini-1.5-flash-001",
+    "gemini-1.5-flash",
+    "gemini-2.5-flash",
+    "gemini-2.0-flash-exp",
+    "gemini-1.5-pro-latest",
+    "gemini-1.5-pro",
+  ].filter((x): x is string => Boolean(x));
+
+  // 2. Dynamically query user's actual available models only if no cached model
+  if (!cachedWorkingGeminiModel) {
+    try {
+      const listRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(cleanKey)}`,
+        {
+          headers: { "x-goog-api-key": cleanKey },
+          signal,
+        }
+      );
+      if (listRes.ok) {
+        const listData = (await listRes.json()) as {
+          models?: Array<{ name: string; supportedGenerationMethods?: string[] }>;
+        };
+        if (Array.isArray(listData.models) && listData.models.length > 0) {
+          const textModels = listData.models
+            .filter((m) => {
+              const name = (m.name || "").toLowerCase();
+              const isGen = m.supportedGenerationMethods?.includes("generateContent");
+              const isNonText =
+                name.includes("tts") ||
+                name.includes("audio") ||
+                name.includes("embed") ||
+                name.includes("imagen") ||
+                name.includes("aqa") ||
+                name.includes("robotics");
+              return isGen && !isNonText;
+            })
+            .map((m) => m.name.replace(/^models\//, ""));
+
+          if (textModels.length > 0) {
+            textModels.sort((a, b) => {
+              const aFlash = a.includes("flash") ? -1 : 1;
+              const bFlash = b.includes("flash") ? -1 : 1;
+              return aFlash - bFlash;
+            });
+
+            candidateModels = Array.from(new Set([requestedModel, ...textModels, ...candidateModels]));
+          }
+        }
+      }
+    } catch {
+      // Continue with static candidate models if list endpoint is unreachable
+    }
+  }
+
+  const uniqueModels = Array.from(new Set(candidateModels.filter(Boolean)));
+  let lastError: Error | null = null;
+
+  for (const m of uniqueModels) {
+    if (signal.aborted) break;
+
+    // Try v1beta first, then v1
+    const apiVersions = ["v1beta", "v1"];
+    for (const apiVer of apiVersions) {
+      if (signal.aborted) break;
+
+      const url = `https://generativelanguage.googleapis.com/${apiVer}/models/${encodeURIComponent(
+        m
+      )}:generateContent?key=${encodeURIComponent(cleanKey)}`;
+
+      try {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": cleanKey,
+          },
+          body: JSON.stringify({
+            contents: [
+              {
+                role: "user",
+                parts: [{ text: `${SYSTEM_PROMPT}\n\n${userPrompt}` }],
+              },
+            ],
+            generationConfig: {
+              temperature: 0.1,
+            },
+          }),
+          signal,
+        });
+
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}));
+          const message =
+            (errorData as { error?: { message?: string } })?.error?.message ||
+            `HTTP ${res.status} ${res.statusText}`;
+
+          lastError = new Error(`Gemini API (${m} on ${apiVer}): ${message}`);
+
+          // If not found, rate-limited, or quota-exceeded, try next version / model
+          if (
+            res.status === 404 ||
+            res.status === 400 ||
+            res.status === 429 ||
+            message.includes("not found") ||
+            message.includes("not supported") ||
+            message.includes("quota") ||
+            message.includes("Quota") ||
+            message.includes("exceeded") ||
+            message.includes("rate")
+          ) {
+            continue;
+          }
+
+          break; // For other errors, move to next model
+        }
+
+        const data = await res.json();
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!text) throw new Error("Empty response from Gemini API");
+        cachedWorkingGeminiModel = m;
+        return text;
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") throw err;
+        lastError = err instanceof Error ? err : new Error(String(err));
+        continue;
+      }
+    }
+  }
+
+  throw lastError || new Error("Failed to execute Gemini API request across candidate models.");
 }
 
 async function callOpenAICompatible(

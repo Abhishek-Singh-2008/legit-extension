@@ -84,8 +84,10 @@ function populateForm(s: Partial<ExtensionSettings>): void {
   providerSelect.value = provider;
   updateProviderUI(provider);
 
-  if (s.aiModel) {
+  if (s.aiModel && s.aiModel !== "gemini-1.5-flash") {
     ($<HTMLInputElement>("ai-model-input")).value = s.aiModel;
+  } else {
+    ($<HTMLInputElement>("ai-model-input")).value = "";
   }
   if (s.aiCustomEndpoint) {
     ($<HTMLInputElement>("ai-endpoint-input")).value = s.aiCustomEndpoint;
@@ -608,7 +610,7 @@ function updateProviderUI(provider: AIProvider): void {
   const endpointField = $("ai-endpoint-field");
 
   modelInput.placeholder = defaultModel;
-  modelHint.textContent = `Default model for ${provider}: ${defaultModel}`;
+  modelHint.textContent = `Leave blank to use default model: ${defaultModel}`;
 
   if (provider === "custom") {
     endpointField.classList.remove("hidden");

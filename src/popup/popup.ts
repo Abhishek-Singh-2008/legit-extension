@@ -7,6 +7,7 @@
 //   - Commit links are validated to start with https://github.com/ before opening.
 
 import { logger } from "@/utils/logger";
+import { slugFromUrl, slugToTitle } from "@/utils/slugify";
 import type { ExtensionSettings, SyncHistoryRecord, SyncStats } from "@/types/settings";
 import type { LeetCodeProblem } from "@/types/leetcode";
 import type { ConnectionStatus } from "@/storage/storage";
@@ -51,9 +52,30 @@ async function loadAndRender(): Promise<void> {
     if (settingsRes?.ok) {
       renderSettings(settingsRes.data as Partial<ExtensionSettings>);
     }
-    if (problemRes?.ok) {
-      renderProblem(problemRes.data as LeetCodeProblem | null);
+
+    let currentProblem: LeetCodeProblem | null = problemRes?.ok
+      ? (problemRes.data as LeetCodeProblem)
+      : null;
+
+    try {
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (activeTab?.url) {
+        const slug = slugFromUrl(activeTab.url);
+        if (slug) {
+          currentProblem = {
+            title: slugToTitle(slug),
+            slug,
+            difficulty: currentProblem?.slug === slug ? currentProblem.difficulty : "Easy",
+            url: `https://leetcode.com/problems/${slug}/`,
+          };
+        }
+      }
+    } catch {
+      // Fallback to storage
     }
+
+    renderProblem(currentProblem);
+
     if (statsRes?.ok) {
       renderStats(statsRes.data as SyncStats);
     }
