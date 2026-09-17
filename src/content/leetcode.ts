@@ -11,6 +11,7 @@ import { slugFromUrl } from "@/utils/slugify";
 import { getCurrentProblem } from "@/content/problem-detector";
 import { watchSubmissionResult } from "@/content/submission-detector";
 import { fetchAcceptedCode } from "@/content/leetcode-api";
+import { MonacoCodeExtractor, getCurrentLanguage } from "@/content/code-extractor";
 import type { LeetCodeProblem, LeetCodeSubmission, SubmissionStatus } from "@/types/leetcode";
 
 logger.info("LeetCode GitHub Sync content script loaded.");
@@ -111,19 +112,28 @@ watchSubmissionResult({
       }
 
       logger.info(`[LCSync] Accepted: ${problem.title}`);
-      logger.info("[LCSync] Fetching code from LeetCode API...");
+      
+      // 1. Try direct Monaco editor extraction for real-time code and comments
+      const monacoExtractor = new MonacoCodeExtractor();
+      let code = monacoExtractor.canExtract() ? monacoExtractor.extractCode() : null;
+      let language = getCurrentLanguage();
 
-      // Fetch code via LeetCode's own GraphQL API
-      const result = await fetchAcceptedCode(problem.slug);
-
-      const code = result?.code ?? "";
-      const language = result?.language ?? "python3";
+      // 2. Fallback to LeetCode GraphQL API if editor extraction is empty
+      if (!code || code.trim().length === 0) {
+        logger.info("[LCSync] Fetching code from LeetCode GraphQL API...");
+        const result = await fetchAcceptedCode(problem.slug);
+        if (result?.code) {
+          code = result.code;
+          language = result.language;
+        }
+      }
 
       if (!code || code.trim().length === 0) {
         logger.error("[LCSync] Could not extract your submitted code (empty result).");
-      } else {
-        logger.debug(`[LCSync] Code extracted successfully (${code.length} chars, ${language})`);
+        return;
       }
+
+      logger.info(`[LCSync] Code extracted successfully (${code.length} chars, ${language})`);
 
       // Construct full submission payload
       const submission: LeetCodeSubmission = {
