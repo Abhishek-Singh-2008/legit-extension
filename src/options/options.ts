@@ -84,8 +84,10 @@ function populateForm(s: Partial<ExtensionSettings>): void {
   providerSelect.value = provider;
   updateProviderUI(provider);
 
-  if (s.aiModel) {
+  if (s.aiModel && s.aiModel !== "gemini-1.5-flash") {
     ($<HTMLInputElement>("ai-model-input")).value = s.aiModel;
+  } else {
+    ($<HTMLInputElement>("ai-model-input")).value = "";
   }
   if (s.aiCustomEndpoint) {
     ($<HTMLInputElement>("ai-endpoint-input")).value = s.aiCustomEndpoint;

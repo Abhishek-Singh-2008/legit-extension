@@ -165,19 +165,30 @@ export async function testAiConnection(
     return { ok: false, error: "Please enter an API key to test." };
   }
 
+  const cleanKey = apiKey.trim();
   const testPrompt = "Respond with JSON: {\"status\":\"ok\"}";
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 7000);
 
   try {
     switch (provider) {
-      case "gemini":
-        await callGemini(apiKey, model, testPrompt, controller.signal);
+      case "gemini": {
+        // Direct key validation via Google Gemini models service
+        const testUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(cleanKey)}`;
+        const res = await fetch(testUrl, { signal: controller.signal });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          const errMsg =
+            (errData as { error?: { message?: string } })?.error?.message ||
+            `HTTP ${res.status} ${res.statusText}`;
+          throw new Error(`Gemini API Error: ${errMsg}`);
+        }
         break;
+      }
       case "groq":
         await callOpenAICompatible(
           "https://api.groq.com/openai/v1/chat/completions",
-          apiKey,
+          cleanKey,
           model,
           testPrompt,
           controller.signal
@@ -186,19 +197,19 @@ export async function testAiConnection(
       case "openai":
         await callOpenAICompatible(
           "https://api.openai.com/v1/chat/completions",
-          apiKey,
+          cleanKey,
           model,
           testPrompt,
           controller.signal
         );
         break;
       case "anthropic":
-        await callAnthropic(apiKey, model, testPrompt, controller.signal);
+        await callAnthropic(cleanKey, model, testPrompt, controller.signal);
         break;
       case "openrouter":
         await callOpenAICompatible(
           "https://openrouter.ai/api/v1/chat/completions",
-          apiKey,
+          cleanKey,
           model,
           testPrompt,
           controller.signal
@@ -209,7 +220,7 @@ export async function testAiConnection(
         if (!endpoint.endsWith("/chat/completions") && !endpoint.includes("generate")) {
           endpoint = endpoint.replace(/\/+$/, "") + "/chat/completions";
         }
-        await callOpenAICompatible(endpoint, apiKey, model, testPrompt, controller.signal);
+        await callOpenAICompatible(endpoint, cleanKey, model, testPrompt, controller.signal);
         break;
       }
     }
@@ -235,15 +246,51 @@ async function callGemini(
   userPrompt: string,
   signal: AbortSignal
 ): Promise<string> {
-  const candidateModels = [
-    model,
+  const cleanKey = apiKey.trim();
+  let requestedModel = (model || "").trim().replace(/^models\//, "");
+  if (!requestedModel || /\s/.test(requestedModel)) {
+    requestedModel = "gemini-2.0-flash";
+  }
+
+  // Dynamic candidate models resolution
+  let candidateModels = [
+    requestedModel,
     "gemini-2.0-flash",
     "gemini-1.5-flash-latest",
     "gemini-2.5-flash",
     "gemini-1.5-flash",
+    "gemini-pro",
   ];
-  const uniqueModels = Array.from(new Set(candidateModels.filter(Boolean)));
 
+  try {
+    const listRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(cleanKey)}`,
+      { signal }
+    );
+    if (listRes.ok) {
+      const listData = (await listRes.json()) as {
+        models?: Array<{ name: string; supportedGenerationMethods?: string[] }>;
+      };
+      if (Array.isArray(listData.models) && listData.models.length > 0) {
+        const supported = listData.models
+          .filter((m) => m.supportedGenerationMethods?.includes("generateContent"))
+          .map((m) => m.name.replace(/^models\//, ""));
+
+        if (supported.length > 0) {
+          const matchRequested = supported.find(
+            (m) => m.toLowerCase() === requestedModel.toLowerCase()
+          );
+          candidateModels = matchRequested
+            ? [matchRequested, ...supported.filter((m) => m !== matchRequested)]
+            : [...supported];
+        }
+      }
+    }
+  } catch {
+    // Continue with candidate models on list error
+  }
+
+  const uniqueModels = Array.from(new Set(candidateModels.filter(Boolean)));
   let lastError: Error | null = null;
 
   for (const m of uniqueModels) {
@@ -251,24 +298,20 @@ async function callGemini(
 
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
       m
-    )}:generateContent?key=${encodeURIComponent(apiKey.trim())}`;
+    )}:generateContent?key=${encodeURIComponent(cleanKey)}`;
 
     try {
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          systemInstruction: {
-            parts: [{ text: SYSTEM_PROMPT }],
-          },
           contents: [
             {
               role: "user",
-              parts: [{ text: userPrompt }],
+              parts: [{ text: `${SYSTEM_PROMPT}\n\n${userPrompt}` }],
             },
           ],
           generationConfig: {
-            responseMimeType: "application/json",
             temperature: 0.1,
           },
         }),
@@ -281,7 +324,6 @@ async function callGemini(
           (errorData as { error?: { message?: string } })?.error?.message ||
           `HTTP ${res.status} ${res.statusText}`;
 
-        // If it's a 404 / model not found, try the next candidate model
         if (res.status === 404 || message.includes("not found") || message.includes("not supported")) {
           lastError = new Error(`Gemini API Error (${m}): ${message}`);
           continue;
@@ -297,7 +339,6 @@ async function callGemini(
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") throw err;
       lastError = err instanceof Error ? err : new Error(String(err));
-      // If error indicates not found, continue to next model candidate
       if (lastError.message.includes("not found") || lastError.message.includes("404")) {
         continue;
       }
