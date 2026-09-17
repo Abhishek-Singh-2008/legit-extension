@@ -1,14 +1,14 @@
 # Legit - LeetCode to GitHub Sync
 
-A privacy-first, multi-user Chrome Extension that automatically synchronizes accepted LeetCode solutions to the user's own GitHub repository.
+A privacy-first, multi-user Chrome Extension that automatically synchronizes accepted LeetCode solutions to your GitHub repository with AI-powered time/space complexity analysis.
 
 ![Manifest V3](https://img.shields.io/badge/Manifest-V3-blue)
 ![TypeScript](https://img.shields.io/badge/TypeScript-blue)
 ![Vite](https://img.shields.io/badge/Vite-purple)
 ![License](https://img.shields.io/badge/License-MIT-green)
-[![Chrome Web Store](https://img.shields.io/badge/Chrome_Web_Store-v1.0.1_Live-brightgreen?logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/ehjenhfhnkojhpljcdohihpjpngfljpo)
+[![Chrome Web Store](https://img.shields.io/badge/Chrome_Web_Store-v1.0.2-brightgreen?logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/ehjenhfhnkojhpljcdohihpjpngfljpo)
 
-> 🚀 **Official Release**: **Legit - LeetCode to GitHub Sync** is now live and publicly available on the [Chrome Web Store](https://chromewebstore.google.com/detail/ehjenhfhnkojhpljcdohihpjpngfljpo). Install it with a single click!
+> 🚀 **Official Release**: **Legit - LeetCode to GitHub Sync** is publicly available on the [Chrome Web Store](https://chromewebstore.google.com/detail/ehjenhfhnkojhpljcdohihpjpngfljpo). Install it with a single click!
 
 ---
 
@@ -16,13 +16,13 @@ A privacy-first, multi-user Chrome Extension that automatically synchronizes acc
 
 | Area | Status |
 |---|---|
-| Core extension | ✅ Ready |
-| Multi-user GitHub support | ✅ Ready |
-| Automatic sync | ✅ Ready |
-| Error handling & recovery | ✅ Ready |
-| Sync history & dashboard | ✅ Ready |
-| Peer testing | ✅ Completed |
-| Chrome Web Store | 🚀 Published / Live (v1.0.1) |
+| Core extension & real-time sync | ✅ Ready (v1.0.2) |
+| 1-Click GitHub Device Flow | ✅ Ready |
+| Fine-Grained PAT support | ✅ Ready |
+| Multi-Provider AI Complexity Analysis | ✅ Ready (Gemini, Groq, OpenAI, Anthropic, OpenRouter) |
+| LeetCode GraphQL accuracy & Monaco DOM extraction | ✅ Ready |
+| Sync history & local analytics dashboard | ✅ Ready |
+| Chrome Web Store | 🚀 v1.0.2 Ready |
 
 ---
 
@@ -36,43 +36,51 @@ The easiest and recommended way to use Legit is by installing it directly from t
 
 1. **Install**: Click the link above and choose **Add to Chrome**.
 2. **Open Settings**: Click the Legit extension icon in your toolbar and select **Settings / Dashboard** (or right-click → Options).
-3. **Connect GitHub**: Generate your own GitHub Fine-grained Personal Access Token (PAT) and click **Verify & Connect**.
-4. **Solve & Sync**: Choose your target repository and branch. When you submit an **Accepted** solution on [LeetCode](https://leetcode.com/problems/), Legit automatically commits the solution and problem details to your repository!
+3. **Connect GitHub**: Click **Connect with GitHub** (1-Click Device Flow) or paste a GitHub Fine-grained Personal Access Token (PAT).
+4. **Solve & Sync**: Choose your target repository and branch. When you submit an **Accepted** solution on [LeetCode](https://leetcode.com/problems/), Legit automatically commits the solution, problem details, and AI complexity analysis to your repository!
 
 ---
 
-## 🔑 GitHub Fine-Grained PAT Setup Guide
+## 🔑 Authentication Options
 
-Legit uses GitHub's Fine-grained Personal Access Tokens (PAT) to commit solutions directly from your browser to your GitHub repository without routing your code through third-party servers.
+Legit connects directly from your browser to GitHub via the official GitHub REST API. No intermediate backend server ever sees your tokens.
 
-> ⚠️ **IMPORTANT**: Every user must create and connect using their **OWN** GitHub account and their **OWN** Personal Access Token. Never use anyone else's token or commit your PAT to any public repository.
+### Option 1: 1-Click GitHub Device Flow (Recommended)
+1. Open Legit **Settings / Dashboard**.
+2. Under **GitHub Authentication**, click **Connect with GitHub**.
+3. A modal opens with an 8-character code (e.g., `ABCD-1234`).
+4. Click **Open GitHub & Authorize**, paste the code, and approve access.
+5. Legit automatically completes authentication and connects your account!
 
-### Step 1: Create your Personal Access Token on GitHub
+### Option 2: Fine-Grained Personal Access Token (PAT)
+1. Go to [GitHub Fine-grained Personal Access Tokens](https://github.com/settings/personal-access-tokens/new).
+2. Set token name to `Legit` and select your target repository.
+3. Under **Repository permissions**, grant **Contents: Read and write**.
+4. Generate and copy the token (`github_pat_…`).
+5. Paste into Legit **Settings** → **Personal Access Token** and click **Verify & Connect**.
 
-1. Sign in to your **OWN** account on [GitHub](https://github.com).
-2. Go to the [GitHub Fine-grained Personal Access Tokens creation page](https://github.com/settings/personal-access-tokens/new).
-3. Fill out the token details:
-   - **Token name**: Enter `Legit` (or any recognizable name).
-   - **Expiration**: Select your preferred expiration timeframe (e.g., 90 days, 1 year).
-   - **Resource owner**: Select your personal GitHub account.
-   - **Repository access**: Choose **Only selected repositories** and pick the repository where you want Legit to commit your LeetCode solutions.
-4. Set the required repository permission:
-   - Scroll down to **Repository permissions**.
-   - Find **Contents** and set the access level to **Read and write** (access: `Read and write`).
-5. Click **Generate token** at the bottom of the page.
-6. **Copy your token immediately** (`github_pat_…`). GitHub will only show it to you once!
+---
 
-### Step 2: Connect Your Token in Legit
+## 🤖 AI Complexity & Approach Analysis
 
-1. Click the **Legit** icon in your browser toolbar and open **Settings / Dashboard** (or right-click → Options).
-2. In the **GitHub Authentication** card, paste your token into the **Personal Access Token (PAT)** input field.
-3. Click **Verify & Connect**.
-4. Once verified, your GitHub username and avatar will display.
-5. In the **Repository Configuration** card:
-   - Select your target **Repository** from the dropdown menu.
-   - Select your target **Branch** (e.g. `main` or `master`).
-   - Click **Save Repository**.
-6. That's it! Your setup is complete.
+Legit includes built-in Multi-Provider AI analysis that automatically evaluates your accepted code upon submission:
+
+- **Time Complexity** (e.g. $\mathcal{O}(n \log n)$)
+- **Space Complexity** (e.g. $\mathcal{O}(1)$)
+- **Approach & Intuition** (A clean 2-3 sentence algorithmic summary)
+
+### Supported AI Providers
+
+| Provider | Supported Models / Defaults | Notes |
+|---|---|---|
+| **Google Gemini** | Dynamic auto-discovery (`gemini-2.0-flash`, `gemini-2.5-flash`, etc.) | Free tier available via Google AI Studio |
+| **Groq** | `llama-3.3-70b-versatile`, `mixtral-8x7b-32768` | Ultra-fast inference |
+| **OpenAI** | `gpt-4o-mini`, `gpt-4o` | Official OpenAI API |
+| **Anthropic** | `claude-3-5-haiku-latest`, `claude-3-5-sonnet-latest` | Claude API |
+| **OpenRouter** | Any OpenRouter model ID | Multi-model routing |
+| **Custom (OpenAI-compatible)** | Local LLMs (Ollama, LM Studio, vLLM) or private gateways | Set custom Base URL |
+
+> 🔒 **Privacy Guarantee**: AI keys are stored strictly in `chrome.storage.local`. Requests are sent directly from your browser to the chosen provider's official endpoint. If AI analysis fails or times out, solution synchronization to GitHub continues uninterrupted.
 
 ---
 
@@ -85,7 +93,11 @@ Click Submit → Verdict: Accepted
           ↓
 Legit detects the accepted verdict in real time
           ↓
-Extracts problem metadata & source code via LeetCode GraphQL
+Extracts fresh code directly from Monaco Editor DOM
+          ↓
+Resolves official problem metadata & difficulty via LeetCode GraphQL
+          ↓
+Runs AI Complexity & Approach Analysis (non-blocking)
           ↓
 Generates SHA-256 hash to verify code isn't a duplicate
           ↓
@@ -99,16 +111,16 @@ algorithms/two-sum/README.md
 
 ## ✨ Key Features
 
-- **Automatic Synchronization**: Detects accepted submissions on LeetCode problem pages in real-time and pushes solution code and problem documentation directly to GitHub.
-- **Fine-Grained PAT Authentication**: Authenticates securely using GitHub Fine-grained PATs with scoped `Contents: Read and write` access to your selected repository. No OAuth servers or broad account permissions required.
-- **Multi-User & Multi-Repository Support**: Any GitHub user can connect their account and select any repository and branch they have write access to.
-- **Customizable Folder Formats**: Organize solutions by folder structure (`{slug}`, `{difficulty}/{slug}`, `{slug}/{language}`) and configurable base directories.
-- **Template-Based Commit Messages**: Custom commit message templates supporting `{title}`, `{slug}`, `{difficulty}`, and `{language}` placeholders.
-- **Automatic README Generation**: Creates structured `README.md` files alongside solutions containing difficulty, language, problem links, and submission date.
-- **SHA-256 Duplicate Detection**: Hashes solution code locally using Web Crypto SHA-256 to prevent duplicate GitHub commits when re-submitting unchanged code.
-- **Resilient Error Recovery & Retries**: Retries transient API and network failures with exponential backoff (1s, 3s) while handling token expiration (HTTP 401) and rate limits gracefully.
-- **Sync History & Local Dashboard**: Stores up to 200 local sync records with an interactive Options Dashboard featuring search, status filtering, difficulty stats, top language metrics, and direct commit links.
-- **100% Serverless & Privacy-First**: Solution code is sent directly from your browser to GitHub via the official REST API. Tokens are stored locally in `chrome.storage.local` and are never uploaded to any external server or logged.
+- **Automatic Synchronization**: Detects accepted submissions on LeetCode in real-time and pushes solution code and documentation directly to GitHub.
+- **1-Click Device Flow & PAT Authentication**: Flexible login options with zero third-party proxy servers.
+- **AI-Powered README Generation**: Automatically populates `README.md` with Time Complexity, Space Complexity, and Approach alongside problem description and stats.
+- **Multi-Provider AI**: Works with Google Gemini, Groq, OpenAI, Anthropic, OpenRouter, or custom OpenAI-compatible endpoints.
+- **Accurate Difficulty & Metadata**: Fetches official difficulty (`Easy`, `Medium`, `Hard`) via GraphQL even if web DOM badges lag.
+- **Real-Time Editor Code Extraction**: Captures latest Monaco Editor changes instantly without waiting for LeetCode indexing delays.
+- **SHA-256 Duplicate Detection**: Prevents redundant commits when re-submitting unchanged code.
+- **Conflict Prevention & Safe Retries**: Built-in 409 Conflict auto-resolution with SHA refresh and exponential backoff retry.
+- **Customizable Folder Structure**: Organize solutions by `{slug}`, `{difficulty}/{slug}`, or `{slug}/{language}` with custom base directories.
+- **Interactive Local Dashboard**: Visual sync history, difficulty counters, language distribution, search, and direct commit links.
 
 ---
 
@@ -120,7 +132,8 @@ LeetCode Tab (leetcode.com/problems/*)
      content/leetcode.ts           ← SPA navigation listener & coordinator
      content/problem-detector.ts   ← Problem title, slug, difficulty
      content/submission-detector   ← Verdict watcher (MutationObserver)
-     content/leetcode-api.ts       ← GraphQL query for accepted code
+     content/leetcode-api.ts       ← GraphQL query for metadata & difficulty
+     content/code-extractor.ts     ← Monaco Editor real-time code reader
           │
           │ chrome.runtime.sendMessage
           ▼
@@ -128,14 +141,15 @@ LeetCode Tab (leetcode.com/problems/*)
           │
           ├── storage/storage.ts        ← chrome.storage.local wrapper & stats
           ├── utils/hash.ts            ← SHA-256 submission deduplication
-          ├── utils/errors.ts          ← Extension error hierarchy & HTTP classifiers
+          ├── ai/ai-client.ts          ← Multi-provider AI analysis engine
           │
           ▼
-     github/github-push.ts         ← Push pipeline orchestrator
+     github/github-push.ts         ← Safe push pipeline orchestrator
           ├── github/github-api.ts      ← GitHub REST API client with retry backoff
-          ├── github/github-auth.ts     ← PAT verification & repo access check
+          ├── github/github-auth.ts     ← Token & Device Flow authentication
+          ├── github/github-device-flow.ts ← GitHub OAuth Device Flow client
           ├── github/github-repository.ts← File path resolver
-          └── github/github-file.ts     ← README generator & commit message template
+          └── github/github-file.ts     ← README generator (with AI complexity)
           │
           ▼
      GitHub REST API (api.github.com)
@@ -159,6 +173,8 @@ legit-extension/
 │   ├── create-zip.mjs             # Distribution ZIP packager
 │   └── create-webstore-zip.mjs    # Chrome Web Store ZIP packager
 └── src/
+    ├── ai/
+    │   └── ai-client.ts           # Multi-provider AI engine (Gemini, Groq, OpenAI, etc.)
     ├── background/
     │   └── service-worker.ts      # MV3 Service Worker (message router & pipeline)
     ├── content/
@@ -170,23 +186,24 @@ legit-extension/
     ├── github/
     │   ├── github-api.ts          # GitHub REST API client (with retry backoff)
     │   ├── github-auth.ts         # Token verification & repository access checks
+    │   ├── github-device-flow.ts  # GitHub OAuth 1-Click Device Flow implementation
     │   ├── github-file.ts         # README generator & commit message formatter
-    │   ├── github-push.ts         # GitHub file push orchestrator
+    │   ├── github-push.ts         # Safe GitHub file push orchestrator
     │   └── github-repository.ts   # File path resolver
     ├── options/
     │   ├── options.html           # Options & Dashboard HTML layout
-    │   ├── options.ts             # Options script (PAT connect, repo select, dashboard)
+    │   ├── options.ts             # Options script (Auth, AI config, Dashboard)
     │   └── options.css            # Options & Dashboard stylesheet
     ├── popup/
     │   ├── popup.html             # Extension popup HTML layout
-    │   ├── popup.ts               # Popup script (status, stats summary, recent syncs)
+    │   ├── popup.ts               # Popup script (active problem, status, stats)
     │   └── popup.css              # Popup stylesheet
     ├── storage/
     │   └── storage.ts             # Typed chrome.storage.local wrapper & stats calculator
     ├── types/
     │   ├── github.ts              # GitHub API interfaces
     │   ├── leetcode.ts            # LeetCode problem & submission interfaces
-    │   └── settings.ts            # Extension settings, LastSync, History & Stats types
+    │   └── settings.ts            # Extension settings, AI Config, History & Stats types
     └── utils/
         ├── errors.ts              # Custom ExtensionError hierarchy & HTTP error handling
         ├── hash.ts                # Web Crypto SHA-256 hash utility
@@ -207,15 +224,18 @@ Configure these settings inside the **Options / Dashboard** page:
 | **Commit Message Format** | Template for commit messages (`{title}`, `{slug}`, `{difficulty}`, `{language}`) | `feat: add {title} solution` |
 | **Auto Sync** | Automatically push solution when Accepted verdict is detected | `true` |
 | **Generate README** | Automatically create a `README.md` alongside each solution | `true` |
+| **AI Complexity Analysis** | Enable automated Time/Space complexity & Approach generation | `true` |
+| **AI Provider** | Choose from Gemini, Groq, OpenAI, Anthropic, OpenRouter, or Custom | `Gemini` |
+| **AI API Key** | User-provided API key for your chosen AI provider | *User configured* |
 | **Notifications** | Show desktop notifications for sync results and errors | `true` |
 
 ---
 
 ## 🔒 Security & Privacy
 
-- **100% Serverless Architecture**: The extension communicates directly with `https://api.github.com` and `https://leetcode.com`. There are no intermediate proxy servers, tracking backends, or third-party databases.
-- **Isolated Local Storage**: Your GitHub PAT is saved strictly in your browser's private `chrome.storage.local`. It is never transmitted to any server other than official GitHub endpoints.
-- **Automatic Token Redaction**: All console logs pass through token sanitization filters (`github_pat_*`, `ghp_*`, `gho_*`, `Bearer *`) to prevent credential leakage in developer tools.
+- **100% Serverless Architecture**: The extension communicates directly with `https://api.github.com`, `https://leetcode.com`, and the configured AI provider endpoint. No intermediate proxy servers or analytics databases exist.
+- **Isolated Local Storage**: Your GitHub tokens and AI API keys are stored strictly in your browser's private `chrome.storage.local`.
+- **Automatic Token Redaction**: All console logs pass through token sanitization filters (`github_pat_*`, `ghp_*`, `gho_*`, `Bearer *`, API keys) to prevent credential leakage in developer tools.
 - **Strict Input Escaping & Link Validation**: User inputs and problem titles pass through HTML escaping before rendering. External links are strictly validated to begin with `https://github.com/` before opening.
 - **Full Privacy Policy**: Read our comprehensive [Privacy Policy](privacy.html).
 
@@ -223,47 +243,32 @@ Configure these settings inside the **Options / Dashboard** page:
 
 ## 🛡️ Manifest Permissions
 
-Legit requires minimal permissions to operate:
-
 | Permission | Purpose |
 |---|---|
-| `storage` | Saves user settings, GitHub PAT, sync history, and deduplication hashes locally in `chrome.storage.local`. |
+| `storage` | Saves user settings, auth tokens, AI keys, sync history, and deduplication hashes locally in `chrome.storage.local`. |
 | `notifications` | Displays desktop notifications for sync success, duplicate skips, and authentication errors. |
+| `activeTab` | Detects current active problem tab on popup open for real-time problem tracking. |
 | `https://leetcode.com/*` | Required for content scripts to detect verdicts and query problem details from LeetCode GraphQL. |
-| `https://api.github.com/*` | Required to create commits, check repository permissions, and list branches via GitHub REST API. |
-| `https://github.com/*` | Fallback avatar resolution and direct links. |
+| `https://api.github.com/*` | Required to create commits, check repository permissions, and perform Device Flow auth. |
+| `https://github.com/*` | Fallback avatar resolution, device flow authorization, and direct links. |
+| `https://generativelanguage.googleapis.com/*` | Google Gemini AI complexity analysis API. |
+| `https://api.groq.com/*` | Groq AI complexity analysis API. |
+| `https://api.openai.com/*` | OpenAI complexity analysis API. |
+| `https://api.anthropic.com/*` | Anthropic Claude complexity analysis API. |
+| `https://openrouter.ai/*` | OpenRouter multi-model complexity analysis API. |
 
 ---
 
 ## 🛠️ Troubleshooting
 
-- **Branch Selection Troubleshooting**: If the branch list does not load, verify that your Fine-grained PAT has the required `Contents: Read and write` repository permission and try clicking the refresh button next to the dropdown.
-- **Code Extraction Error**: Make sure you are on a problem page with an active submission. Refresh the LeetCode tab if LeetCode's DOM structure fails to load.
-- **Authentication Expired**: If you revoke or expire your PAT on GitHub, the extension notifies you and updates the sync status to `Auth Expired`. Re-enter a valid PAT in the Options page to reconnect.
-- **Duplicate Submissions Skipped**: Submitting identical code for the same problem will produce a `Duplicate` status to prevent unnecessary GitHub commits. To push an update, modify your solution code or comments.
-
----
-
-## ⚠️ Known Limitations
-
-- **Single Solution File**: Synchronizes one primary solution file per submission (multi-file submissions are saved as a single solution file in V1).
-- **Complexity Analysis**: Time and space complexity fields in generated `README.md` files require manual complexity analysis notes to prevent automated fabrication.
-
----
-
-## 🗺️ Roadmap & Future Improvements
-
-- [x] Chrome Web Store publication (Live at v1.0.1)
-- [ ] Custom README templates
-- [ ] Support for problem tags and company tags
-- [ ] Multiple solution version history per problem
-- [ ] CSV / JSON statistics export
+- **Branch Selection Troubleshooting**: If the branch list does not load, verify that your token has `Contents: Read and write` permission and click the refresh button next to the dropdown.
+- **AI Complexity Skipped or Timed Out**: If AI analysis takes longer than 15s or the API key runs out of quota, Legit safely commits the solution with standard templates without blocking. Verify your AI key in Options.
+- **Duplicate Submissions Skipped**: Submitting identical code for the same problem produces a `Duplicate` status to prevent unnecessary GitHub commits. To push an update, modify your code or comments.
+- **Authentication Expired**: If you revoke your token on GitHub, Legit updates the status to `Auth Expired`. Reconnect via 1-Click Device Flow or re-enter a valid PAT.
 
 ---
 
 ## 💻 Build From Source (For Developers & Contributors)
-
-Developers who want to modify source code, test locally, or build from scratch require **Node.js** (v18+) and **npm**:
 
 ```bash
 # 1. Clone repository
@@ -280,8 +285,7 @@ npm run typecheck
 npm run build
 
 # 5. Package distribution ZIPs
-node scripts/create-webstore-zip.mjs
-node scripts/create-zip.mjs
+Compress-Archive -Path dist/* -DestinationPath legit-v1.0.2.zip -Force
 ```
 
 ### Loading Unpacked Extension in Chrome (Development Mode)
@@ -321,7 +325,7 @@ If you find Legit useful:
 
 ## 📄 Privacy Policy
 
-Legit operates entirely client-side. We do not operate remote servers, collect telemetry, or share your data with third parties. All network calls occur directly between your browser, LeetCode, and GitHub.
+Legit operates entirely client-side. We do not operate remote servers, collect telemetry, or share your data with third parties. All network calls occur directly between your browser, LeetCode, GitHub, and your chosen AI provider.
 
 Read our full [Privacy Policy](privacy.html).
 
