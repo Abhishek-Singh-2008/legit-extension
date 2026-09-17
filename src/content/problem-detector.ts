@@ -96,45 +96,47 @@ function parseTitleTag(raw: string): string | null {
  * Returns "Unknown" if no badge is found (e.g. page not fully loaded).
  */
 function extractDifficulty(): Difficulty {
+  // Strategy 1: Known design system classes
   for (const [cls, difficulty] of Object.entries(DIFFICULTY_CLASSES)) {
     const el = document.querySelector(`.${cls}`);
-    if (el) {
-      const text = el.textContent?.trim();
-      // Confirm the text actually matches what we expect (sanity check)
-      if (text === difficulty) return difficulty;
-      // Class found but text doesn't match — still trust the class
-      if (text) {
-        const normalised = normaliseDifficultyText(text);
-        if (normalised) return normalised;
-      }
-      return difficulty;
-    }
+    if (el) return difficulty;
   }
 
-  // Fallback: search any element whose sole text content is a difficulty word.
-  // This guards against LeetCode renaming the class while keeping the text.
-  return searchDifficultyByText();
-}
-
-function normaliseDifficultyText(text: string): Difficulty | null {
-  const lower = text.toLowerCase();
-  if (lower === "easy") return "Easy";
-  if (lower === "medium") return "Medium";
-  if (lower === "hard") return "Hard";
-  return null;
-}
-
-/**
- * Last-resort: walk elements that have exactly the difficulty words as text.
- */
-function searchDifficultyByText(): Difficulty {
-  const candidates = document.querySelectorAll(
-    '[class*="difficulty"], [class*="Difficulty"]'
+  // Strategy 2: Color token and data-attribute selectors
+  const easyEl = document.querySelector(
+    '.text-olive, [class*="text-olive"], [class*="text-easy"], [class*="text-green-500"], [class*="text-green-600"], [data-difficulty="Easy"]'
   );
-  for (const el of candidates) {
-    const t = normaliseDifficultyText(el.textContent?.trim() ?? "");
-    if (t) return t;
+  if (easyEl && (easyEl.textContent?.includes("Easy") || easyEl.getAttribute("data-difficulty") === "Easy")) {
+    return "Easy";
   }
+
+  const medEl = document.querySelector(
+    '.text-yellow, [class*="text-yellow"], [class*="text-medium"], [class*="text-yellow-500"], [class*="text-yellow-600"], [data-difficulty="Medium"]'
+  );
+  if (medEl && (medEl.textContent?.includes("Medium") || medEl.getAttribute("data-difficulty") === "Medium")) {
+    return "Medium";
+  }
+
+  const hardEl = document.querySelector(
+    '.text-pink, [class*="text-pink"], [class*="text-red"], [class*="text-hard"], [class*="text-red-500"], [class*="text-red-600"], [data-difficulty="Hard"]'
+  );
+  if (hardEl && (hardEl.textContent?.includes("Hard") || hardEl.getAttribute("data-difficulty") === "Hard")) {
+    return "Hard";
+  }
+
+  // Strategy 3: Text match on problem description container elements
+  const container =
+    document.querySelector("#qd-content, [class*='description'], [class*='question-content'], main") ||
+    document.body;
+  const badges = container.querySelectorAll("div, span, p");
+  for (const el of badges) {
+    if (el.children.length > 0) continue;
+    const t = el.textContent?.trim();
+    if (t === "Easy") return "Easy";
+    if (t === "Medium") return "Medium";
+    if (t === "Hard") return "Hard";
+  }
+
   return "Unknown";
 }
 

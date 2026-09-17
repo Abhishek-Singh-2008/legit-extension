@@ -84,30 +84,15 @@ export async function pushSubmissionToGitHub(
   );
 
   try {
-    // ── Push solution file ──────────────────────────────────────────────────
-    const existingSolution = await client.getFile(repo, solutionPath, branch);
-
-    let solutionCommit;
-    if (existingSolution) {
-      logger.info(`[LCSync] Updating existing solution file (sha: ${existingSolution.sha.slice(0, 7)})`);
-      solutionCommit = await client.updateFile(
-        repo,
-        solutionPath,
-        submission.code,
-        commitMessage,
-        existingSolution.sha,
-        branch
-      );
-    } else {
-      logger.info("[LCSync] Creating new solution file");
-      solutionCommit = await client.createFile(
-        repo,
-        solutionPath,
-        submission.code,
-        commitMessage,
-        branch
-      );
-    }
+    // ── Push solution file with conflict retry ──────────────────────────────
+    const solutionCommit = await safePutFile(
+      client,
+      repo,
+      solutionPath,
+      submission.code,
+      commitMessage,
+      branch
+    );
 
     const commitUrl = solutionCommit.commit.html_url;
     logger.info(`[LCSync] Solution committed: ${commitUrl}`);
@@ -144,21 +129,8 @@ export async function pushSubmissionToGitHub(
       const readmeContent = generateReadme(submission, aiResult);
       const readmeMessage = `docs: add README for ${submission.title}`;
 
-      const existingReadme = await client.getFile(repo, readmePath, branch);
-      if (existingReadme) {
-        logger.info("[LCSync] Updating existing README.md");
-        await client.updateFile(
-          repo,
-          readmePath,
-          readmeContent,
-          readmeMessage,
-          existingReadme.sha,
-          branch
-        );
-      } else {
-        logger.info("[LCSync] Creating README.md");
-        await client.createFile(repo, readmePath, readmeContent, readmeMessage, branch);
-      }
+      // Push README with fresh SHA and conflict retry
+      await safePutFile(client, repo, readmePath, readmeContent, readmeMessage, branch);
     }
 
     logger.info("[LCSync] GitHub sync completed successfully");
@@ -173,4 +145,39 @@ export async function pushSubmissionToGitHub(
     }
     throw err;
   }
+}
+
+/**
+ * Puts a file into GitHub repository with fresh SHA lookup and automatic retry on 409 Conflict.
+ */
+async function safePutFile(
+  client: GitHubApiClientImpl,
+  repo: string,
+  path: string,
+  content: string,
+  message: string,
+  branch: string
+): Promise<import("@/types/github").GitHubCommitResponse> {
+  let lastErr: unknown = null;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const existing = await client.getFile(repo, path, branch);
+      if (existing) {
+        logger.info(`[LCSync] Updating existing ${path} (sha: ${existing.sha.slice(0, 7)})`);
+        return await client.updateFile(repo, path, content, message, existing.sha, branch);
+      } else {
+        logger.info(`[LCSync] Creating new ${path}`);
+        return await client.createFile(repo, path, content, message, branch);
+      }
+    } catch (err) {
+      lastErr = err;
+      if (err instanceof GitHubApiError && err.statusCode === 409 && attempt < 3) {
+        logger.warn(`[LCSync] GitHub 409 Conflict on ${path}, retrying with fresh SHA in ${attempt}s...`);
+        await new Promise((res) => setTimeout(res, 1000 * attempt));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastErr;
 }
