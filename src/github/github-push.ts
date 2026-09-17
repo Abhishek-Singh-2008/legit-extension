@@ -12,6 +12,7 @@ import { logger } from "@/utils/logger";
 import { GitHubApiClientImpl } from "@/github/github-api";
 import { getFilePaths } from "@/github/github-repository";
 import { generateReadme, formatCommitMessage } from "@/github/github-file";
+import { analyzeComplexity } from "@/ai/ai-client";
 import {
   ConfigurationError,
   CodeExtractionError,
@@ -118,7 +119,6 @@ export async function pushSubmissionToGitHub(
       if (settings.aiEnabled && settings.aiApiKey && settings.aiApiKey.trim().length > 0) {
         logger.info(`[LCSync] Running AI complexity analysis via ${settings.aiProvider}...`);
         try {
-          const { analyzeComplexity } = await import("@/ai/ai-client");
           aiResult = await analyzeComplexity({
             provider: settings.aiProvider,
             apiKey: settings.aiApiKey,
