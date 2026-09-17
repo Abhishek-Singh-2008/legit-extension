@@ -168,20 +168,34 @@ export async function testAiConnection(
   const cleanKey = apiKey.trim();
   const testPrompt = "Respond with JSON: {\"status\":\"ok\"}";
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 7000);
+  const timeoutId = setTimeout(() => controller.abort(), 9000);
 
   try {
     switch (provider) {
       case "gemini": {
-        // Direct key validation via Google Gemini models service
+        // Direct key validation via Google Gemini models service with header & param support
         const testUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(cleanKey)}`;
-        const res = await fetch(testUrl, { signal: controller.signal });
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          const errMsg =
-            (errData as { error?: { message?: string } })?.error?.message ||
-            `HTTP ${res.status} ${res.statusText}`;
-          throw new Error(`Gemini API Error: ${errMsg}`);
+        try {
+          const res = await fetch(testUrl, {
+            method: "GET",
+            headers: {
+              "x-goog-api-key": cleanKey,
+            },
+            signal: controller.signal,
+          });
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            const errMsg =
+              (errData as { error?: { message?: string } })?.error?.message ||
+              `HTTP ${res.status} ${res.statusText}`;
+            throw new Error(`Gemini API Error: ${errMsg}`);
+          }
+        } catch (fetchErr) {
+          if (fetchErr instanceof DOMException && fetchErr.name === "AbortError") throw fetchErr;
+          if (fetchErr instanceof Error && fetchErr.message.includes("Gemini API Error")) throw fetchErr;
+          
+          // Fallback test via generateContent call if models listing is blocked
+          await callGemini(cleanKey, model, testPrompt, controller.signal);
         }
         break;
       }
@@ -230,7 +244,7 @@ export async function testAiConnection(
     clearTimeout(timeoutId);
     const isTimeout = err instanceof DOMException && err.name === "AbortError";
     const msg = isTimeout
-      ? "Connection timed out after 7s. Check endpoint or network."
+      ? "Connection timed out. Check your network connection."
       : err instanceof Error
         ? err.message
         : "Failed to connect to AI provider";
@@ -265,7 +279,10 @@ async function callGemini(
   try {
     const listRes = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(cleanKey)}`,
-      { signal }
+      {
+        headers: { "x-goog-api-key": cleanKey },
+        signal,
+      }
     );
     if (listRes.ok) {
       const listData = (await listRes.json()) as {
@@ -303,7 +320,10 @@ async function callGemini(
     try {
       const res = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": cleanKey,
+        },
         body: JSON.stringify({
           contents: [
             {
