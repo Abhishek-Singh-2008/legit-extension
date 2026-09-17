@@ -72,7 +72,7 @@ export async function analyzeComplexity(
   const userPrompt = `Problem: ${title}\nLanguage: ${language}\n\nSubmitted Solution Code:\n\`\`\`${language}\n${code}\n\`\`\``;
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 6000);
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
 
   try {
     let rawResponse: string;
@@ -254,6 +254,8 @@ export async function testAiConnection(
 
 // ── Provider Call Implementations ──────────────────────────────────────────
 
+let cachedWorkingGeminiModel: string | null = null;
+
 async function callGemini(
   apiKey: string,
   model: string,
@@ -268,11 +270,12 @@ async function callGemini(
     requestedModel.includes("tts") ||
     requestedModel.includes("audio")
   ) {
-    requestedModel = "gemini-2.0-flash";
+    requestedModel = cachedWorkingGeminiModel || "gemini-2.0-flash";
   }
 
   // 1. Start with high-priority standard text models
   let candidateModels: string[] = [
+    cachedWorkingGeminiModel,
     requestedModel,
     "gemini-2.0-flash",
     "gemini-1.5-flash-latest",
@@ -283,51 +286,52 @@ async function callGemini(
     "gemini-2.0-flash-exp",
     "gemini-1.5-pro-latest",
     "gemini-1.5-pro",
-  ];
+  ].filter((x): x is string => Boolean(x));
 
-  // 2. Dynamically query user's actual available models to ensure exact matches
-  try {
-    const listRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(cleanKey)}`,
-      {
-        headers: { "x-goog-api-key": cleanKey },
-        signal,
-      }
-    );
-    if (listRes.ok) {
-      const listData = (await listRes.json()) as {
-        models?: Array<{ name: string; supportedGenerationMethods?: string[] }>;
-      };
-      if (Array.isArray(listData.models) && listData.models.length > 0) {
-        const textModels = listData.models
-          .filter((m) => {
-            const name = (m.name || "").toLowerCase();
-            const isGen = m.supportedGenerationMethods?.includes("generateContent");
-            const isNonText =
-              name.includes("tts") ||
-              name.includes("audio") ||
-              name.includes("embed") ||
-              name.includes("imagen") ||
-              name.includes("aqa") ||
-              name.includes("robotics");
-            return isGen && !isNonText;
-          })
-          .map((m) => m.name.replace(/^models\//, ""));
+  // 2. Dynamically query user's actual available models only if no cached model
+  if (!cachedWorkingGeminiModel) {
+    try {
+      const listRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(cleanKey)}`,
+        {
+          headers: { "x-goog-api-key": cleanKey },
+          signal,
+        }
+      );
+      if (listRes.ok) {
+        const listData = (await listRes.json()) as {
+          models?: Array<{ name: string; supportedGenerationMethods?: string[] }>;
+        };
+        if (Array.isArray(listData.models) && listData.models.length > 0) {
+          const textModels = listData.models
+            .filter((m) => {
+              const name = (m.name || "").toLowerCase();
+              const isGen = m.supportedGenerationMethods?.includes("generateContent");
+              const isNonText =
+                name.includes("tts") ||
+                name.includes("audio") ||
+                name.includes("embed") ||
+                name.includes("imagen") ||
+                name.includes("aqa") ||
+                name.includes("robotics");
+              return isGen && !isNonText;
+            })
+            .map((m) => m.name.replace(/^models\//, ""));
 
-        if (textModels.length > 0) {
-          // Sort flash models to the top
-          textModels.sort((a, b) => {
-            const aFlash = a.includes("flash") ? -1 : 1;
-            const bFlash = b.includes("flash") ? -1 : 1;
-            return aFlash - bFlash;
-          });
+          if (textModels.length > 0) {
+            textModels.sort((a, b) => {
+              const aFlash = a.includes("flash") ? -1 : 1;
+              const bFlash = b.includes("flash") ? -1 : 1;
+              return aFlash - bFlash;
+            });
 
-          candidateModels = Array.from(new Set([requestedModel, ...textModels, ...candidateModels]));
+            candidateModels = Array.from(new Set([requestedModel, ...textModels, ...candidateModels]));
+          }
         }
       }
+    } catch {
+      // Continue with static candidate models if list endpoint is unreachable
     }
-  } catch {
-    // Continue with static candidate models if list endpoint is unreachable
   }
 
   const uniqueModels = Array.from(new Set(candidateModels.filter(Boolean)));
@@ -395,6 +399,7 @@ async function callGemini(
         const data = await res.json();
         const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
         if (!text) throw new Error("Empty response from Gemini API");
+        cachedWorkingGeminiModel = m;
         return text;
       } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") throw err;
