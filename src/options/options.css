@@ -927,3 +927,31 @@ body {
   color: var(--color-danger);
 }
 
+.field__label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.btn--xs {
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  color: #58a6ff;
+  border: 1px solid rgba(88, 166, 255, 0.2);
+  background: rgba(88, 166, 255, 0.05);
+}
+
+.btn--xs:hover {
+  background: rgba(88, 166, 255, 0.15);
+  color: #79c0ff;
+}
+
+.spinner--sm {
+  width: 12px;
+  height: 12px;
+  border-width: 2px;
+}
+

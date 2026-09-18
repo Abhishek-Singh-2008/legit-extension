@@ -233,18 +233,6 @@
             </div>
 
             <div class="field">
-              <label class="field__label" for="ai-model-input">Model ID (Optional)</label>
-              <input
-                id="ai-model-input"
-                class="field__input"
-                type="text"
-                placeholder="gemini-2.0-flash"
-                autocomplete="off"
-              />
-              <p id="ai-model-hint" class="field__hint">Leave blank to use the default model (gemini-2.0-flash).</p>
-            </div>
-
-            <div class="field">
               <label class="field__label" for="ai-key-input">API Key</label>
               <div class="pat-field__row">
                 <input
@@ -262,6 +250,32 @@
                 </button>
               </div>
               <p class="field__hint">Stored strictly in local browser storage. Direct connection with 0 intermediary servers.</p>
+            </div>
+
+            <div class="field">
+              <div class="field__label-row">
+                <label class="field__label" for="ai-model-select">AI Model</label>
+                <button id="fetch-ai-models-btn" class="btn btn--ghost btn--xs" type="button" title="Fetch active models for this API key">
+                  <span id="fetch-models-text">🔄 Fetch Models</span>
+                  <span id="fetch-models-spinner" class="spinner spinner--sm hidden" aria-hidden="true"></span>
+                </button>
+              </div>
+              <div class="model-select-row">
+                <select id="ai-model-select" class="field__select">
+                  <option value="">✨ Auto-detect Best Model (Recommended)</option>
+                  <option value="__custom__">⚙️ Custom / Enter manually…</option>
+                </select>
+              </div>
+              <div id="ai-custom-model-container" class="hidden" style="margin-top: 8px;">
+                <input
+                  id="ai-model-input"
+                  class="field__input"
+                  type="text"
+                  placeholder="Enter custom model name (e.g. llama-3.1-8b-instant)"
+                  autocomplete="off"
+                />
+              </div>
+              <p id="ai-model-hint" class="field__hint">Auto-detects the best working model for your API key.</p>
             </div>
 
             <div class="ai-actions-row">
