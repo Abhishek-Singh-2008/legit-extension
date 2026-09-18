@@ -417,12 +417,20 @@ function bindEvents(): void {
   $<HTMLSelectElement>("ai-provider-select").addEventListener("change", (e) => {
     const provider = (e.target as HTMLSelectElement).value as AIProvider;
     updateProviderUI(provider);
+
+    // Clear stale custom model from previous provider and reset status
+    $<HTMLInputElement>("ai-model-input").value = "";
+    $("ai-custom-model-container").classList.add("hidden");
+    const statusEl = $("test-ai-status");
+    statusEl.classList.add("hidden");
+    statusEl.textContent = "";
+
     const apiKey = ($<HTMLInputElement>("ai-key-input")).value.trim();
     const customEndpoint = ($<HTMLInputElement>("ai-endpoint-input")).value.trim();
     if (apiKey) {
       fetchAndPopulateAiModels(provider, apiKey, "", customEndpoint);
     } else {
-      populateDefaultModels(provider);
+      populateDefaultModels(provider, "");
     }
   });
 
@@ -667,6 +675,32 @@ function updateProviderUI(provider: AIProvider): void {
   }
 }
 
+function isModelMatchingProvider(provider: AIProvider, model: string): boolean {
+  if (!model || model === "__custom__") return false;
+  const m = model.toLowerCase();
+  switch (provider) {
+    case "gemini":
+      return m.includes("gemini");
+    case "groq":
+      return (
+        m.includes("llama") ||
+        m.includes("mixtral") ||
+        m.includes("gemma") ||
+        m.includes("deepseek") ||
+        m.includes("qwen") ||
+        m.includes("groq") ||
+        m.includes("compound")
+      );
+    case "openai":
+      return m.startsWith("gpt") || m.startsWith("o1") || m.startsWith("o3");
+    case "anthropic":
+      return m.includes("claude");
+    case "openrouter":
+    case "custom":
+      return true;
+  }
+}
+
 function populateDefaultModels(provider: AIProvider, preselectedModel?: string): void {
   const select = $<HTMLSelectElement>("ai-model-select");
   const customContainer = $("ai-custom-model-container");
@@ -676,13 +710,16 @@ function populateDefaultModels(provider: AIProvider, preselectedModel?: string):
     <option value="__custom__">⚙️ Custom / Enter manually…</option>
   `;
 
-  if (preselectedModel && preselectedModel !== "__custom__") {
+  const isMatching = preselectedModel ? isModelMatchingProvider(provider, preselectedModel) : false;
+
+  if (preselectedModel && isMatching && preselectedModel !== "__custom__") {
     select.value = "__custom__";
     customContainer.classList.remove("hidden");
     $<HTMLInputElement>("ai-model-input").value = preselectedModel;
   } else {
     select.value = "";
     customContainer.classList.add("hidden");
+    $<HTMLInputElement>("ai-model-input").value = "";
   }
 }
 
@@ -720,17 +757,25 @@ async function fetchAndPopulateAiModels(
     html += '<option value="__custom__">⚙️ Custom / Enter manually…</option>';
     select.innerHTML = html;
 
-    const currentModel = preselectedModel || ($<HTMLInputElement>("ai-model-input")).value.trim();
-    if (currentModel && models.includes(currentModel)) {
-      select.value = currentModel;
+    const candidateModel =
+      preselectedModel !== undefined
+        ? preselectedModel
+        : ($<HTMLInputElement>("ai-model-input")).value.trim();
+
+    const isMatching = isModelMatchingProvider(provider, candidateModel);
+
+    if (candidateModel && models.includes(candidateModel)) {
+      select.value = candidateModel;
       $("ai-custom-model-container").classList.add("hidden");
-    } else if (currentModel) {
+      $<HTMLInputElement>("ai-model-input").value = candidateModel;
+    } else if (candidateModel && isMatching && candidateModel !== "__custom__") {
       select.value = "__custom__";
       $("ai-custom-model-container").classList.remove("hidden");
-      $<HTMLInputElement>("ai-model-input").value = currentModel;
+      $<HTMLInputElement>("ai-model-input").value = candidateModel;
     } else {
       select.value = "";
       $("ai-custom-model-container").classList.add("hidden");
+      $<HTMLInputElement>("ai-model-input").value = "";
     }
   } catch (err) {
     logger.warn("Failed to fetch models in options:", err);
