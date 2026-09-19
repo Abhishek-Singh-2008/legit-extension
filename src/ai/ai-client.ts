@@ -27,7 +27,7 @@ export const DEFAULT_AI_MODELS: Record<AIProvider, string> = {
   groq: "llama-3.3-70b-versatile",
   openai: "gpt-4o-mini",
   anthropic: "claude-3-5-haiku-latest",
-  openrouter: "meta-llama/llama-3.3-70b-instruct",
+  openrouter: "openrouter/auto",
   custom: "default",
 };
 
@@ -90,9 +90,11 @@ export function getDefaultModelsForProvider(provider: AIProvider): string[] {
       ];
     case "openrouter":
       return [
-        "meta-llama/llama-3.3-70b-instruct",
+        "openrouter/auto",
+        "meta-llama/llama-3.3-70b-instruct:free",
         "google/gemini-2.0-flash-exp:free",
         "deepseek/deepseek-chat",
+        "meta-llama/llama-3.1-8b-instruct:free",
         "mistralai/mistral-7b-instruct:free",
       ];
     case "custom":
@@ -251,6 +253,8 @@ export async function fetchAvailableModels(
         const res = await fetch("https://openrouter.ai/api/v1/models", {
           headers: {
             Authorization: `Bearer ${cleanKey}`,
+            "HTTP-Referer": "https://github.com/Abhishek-Singh-2008/legit-extension",
+            "X-Title": "Legit - LeetCode Sync",
           },
         });
         if (!res.ok) throw new Error(`OpenRouter returned HTTP ${res.status}`);
@@ -260,16 +264,24 @@ export async function fetchAvailableModels(
             .map((m) => m.id)
             .filter((id) => {
               const lower = id.toLowerCase();
-              return !lower.includes("whisper") && !lower.includes("embed") && !lower.includes("image");
+              return (
+                !lower.includes("whisper") &&
+                !lower.includes("embed") &&
+                !lower.includes("image") &&
+                !lower.includes("tts")
+              );
             });
           if (models.length > 0) {
             models.sort((a, b) => {
+              if (a === "openrouter/auto") return -1;
+              if (b === "openrouter/auto") return 1;
               const aFree = a.includes(":free") ? -1 : 1;
               const bFree = b.includes(":free") ? -1 : 1;
               return aFree - bFree;
             });
-            cachedProviderModels.openrouter = models;
-            return models.slice(0, 30);
+            const allModels = Array.from(new Set(["openrouter/auto", ...models]));
+            cachedProviderModels.openrouter = allModels;
+            return allModels.slice(0, 35);
           }
         }
         break;
@@ -662,7 +674,7 @@ async function callOpenAICompatibleWithFallback(
   const cached = cachedWorkingModels[provider];
   
   let candidates: string[] = [];
-  if (preferredModel) candidates.push(preferredModel);
+  if (preferredModel && preferredModel !== "__custom__") candidates.push(preferredModel);
   if (cached && !candidates.includes(cached)) candidates.push(cached);
 
   // If no working model cached or list is short, fetch live models from API
@@ -695,7 +707,7 @@ async function callOpenAICompatibleWithFallback(
       const errMsg = err instanceof Error ? err.message : String(err);
       lastError = err instanceof Error ? err : new Error(errMsg);
 
-      // If model not found or does not exist, try next candidate model
+      // If model not found, does not exist, rate-limited, or provider error, try next candidate model
       if (
         errMsg.includes("does not exist") ||
         errMsg.includes("not found") ||
@@ -703,8 +715,14 @@ async function callOpenAICompatibleWithFallback(
         errMsg.includes("permission") ||
         errMsg.includes("access") ||
         errMsg.includes("404") ||
+        errMsg.includes("400") ||
+        errMsg.includes("429") ||
         errMsg.includes("rate") ||
-        errMsg.includes("429")
+        errMsg.includes("Provider returned error") ||
+        errMsg.includes("provider") ||
+        errMsg.includes("format") ||
+        errMsg.includes("unavailable") ||
+        errMsg.includes("disabled")
       ) {
         continue;
       }
@@ -720,7 +738,8 @@ async function callOpenAICompatible(
   apiKey: string,
   model: string,
   userPrompt: string,
-  signal: AbortSignal
+  signal: AbortSignal,
+  includeJsonFormat = true
 ): Promise<string> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -729,18 +748,31 @@ async function callOpenAICompatible(
     headers["Authorization"] = `Bearer ${apiKey.trim()}`;
   }
 
+  // OpenRouter requires specific headers for routing
+  if (endpointUrl.includes("openrouter.ai")) {
+    headers["HTTP-Referer"] = "https://github.com/Abhishek-Singh-2008/legit-extension";
+    headers["X-Title"] = "Legit - LeetCode Sync";
+  }
+
+  const isOpenRouter = endpointUrl.includes("openrouter.ai");
+  const body: Record<string, unknown> = {
+    model,
+    messages: [
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "user", content: userPrompt },
+    ],
+    temperature: 0.1,
+  };
+
+  // Only pass response_format if not OpenRouter (OpenRouter free models frequently error on json_object)
+  if (includeJsonFormat && !isOpenRouter) {
+    body["response_format"] = { type: "json_object" };
+  }
+
   const res = await fetch(endpointUrl, {
     method: "POST",
     headers,
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: userPrompt },
-      ],
-      temperature: 0.1,
-      response_format: { type: "json_object" },
-    }),
+    body: JSON.stringify(body),
     signal,
   });
 
@@ -749,6 +781,17 @@ async function callOpenAICompatible(
     const message =
       (errorData as { error?: { message?: string } })?.error?.message ||
       `HTTP ${res.status} ${res.statusText}`;
+
+    // If json_format caused failure, retry without response_format
+    if (
+      includeJsonFormat &&
+      (message.includes("response_format") ||
+        message.includes("json") ||
+        message.includes("Provider returned error"))
+    ) {
+      return callOpenAICompatible(endpointUrl, apiKey, model, userPrompt, signal, false);
+    }
+
     throw new Error(`AI API Error: ${message}`);
   }
 
