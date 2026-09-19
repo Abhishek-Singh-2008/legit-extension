@@ -84,6 +84,33 @@ export async function pushSubmissionToGitHub(
   );
 
   try {
+    // ── Launch AI complexity analysis concurrently with solution upload ─────
+    const aiPromise =
+      settings.generateReadme &&
+      settings.aiEnabled &&
+      settings.aiApiKey &&
+      settings.aiApiKey.trim().length > 0
+        ? analyzeComplexity({
+            provider: settings.aiProvider,
+            apiKey: settings.aiApiKey,
+            model: settings.aiModel,
+            customEndpoint: settings.aiCustomEndpoint,
+            title: submission.title,
+            language: submission.language,
+            code: submission.code,
+          }).catch((aiErr) => {
+            logger.warn("[LCSync] AI analysis failed with error:", aiErr);
+            return {
+              approach: "",
+              timeComplexity: "",
+              timeReason: "",
+              spaceComplexity: "",
+              spaceReason: "",
+              error: aiErr instanceof Error ? aiErr.message : "AI analysis unavailable",
+            };
+          })
+        : Promise.resolve(undefined);
+
     // ── Push solution file with conflict retry ──────────────────────────────
     const solutionCommit = await safePutFile(
       client,
@@ -99,31 +126,13 @@ export async function pushSubmissionToGitHub(
 
     // ── Push README.md (optional) ───────────────────────────────────────────
     if (settings.generateReadme) {
-      let aiResult = undefined;
-
-      if (settings.aiEnabled && settings.aiApiKey && settings.aiApiKey.trim().length > 0) {
-        logger.info(`[LCSync] Running AI complexity analysis via ${settings.aiProvider}...`);
-        try {
-          aiResult = await analyzeComplexity({
-            provider: settings.aiProvider,
-            apiKey: settings.aiApiKey,
-            model: settings.aiModel,
-            customEndpoint: settings.aiCustomEndpoint,
-            title: submission.title,
-            language: submission.language,
-            code: submission.code,
-          });
-        } catch (aiErr) {
-          logger.warn("[LCSync] AI analysis failed with error:", aiErr);
-          aiResult = {
-            approach: "",
-            timeComplexity: "",
-            timeReason: "",
-            spaceComplexity: "",
-            spaceReason: "",
-            error: aiErr instanceof Error ? aiErr.message : "AI analysis unavailable",
-          };
-        }
+      const aiResult = await aiPromise;
+      if (aiResult?.timeComplexity) {
+        logger.info(
+          `[LCSync] AI complexity resolved: Time ${aiResult.timeComplexity}, Space ${aiResult.spaceComplexity}`
+        );
+      } else if (aiResult?.error) {
+        logger.warn(`[LCSync] AI analysis notice: ${aiResult.error}`);
       }
 
       const readmeContent = generateReadme(submission, aiResult);
@@ -131,6 +140,7 @@ export async function pushSubmissionToGitHub(
 
       // Push README with fresh SHA and conflict retry
       await safePutFile(client, repo, readmePath, readmeContent, readmeMessage, branch);
+      logger.info(`[LCSync] README committed: ${readmePath}`);
     }
 
     logger.info("[LCSync] GitHub sync completed successfully");

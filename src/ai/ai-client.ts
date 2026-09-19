@@ -48,10 +48,38 @@ Respond ONLY with a valid JSON object matching this exact schema:
   "spaceReason": "string"
 }`;
 
-// ── Memory Caches ────────────────────────────────────────────────────────────
+// ── Memory & Storage Caches ──────────────────────────────────────────────────
 
+const AI_WORKING_MODELS_STORAGE_KEY = "ai_working_models_cache";
 const cachedProviderModels: Partial<Record<AIProvider, string[]>> = {};
 const cachedWorkingModels: Partial<Record<AIProvider, string>> = {};
+
+export async function getPersistentWorkingModel(provider: AIProvider): Promise<string | undefined> {
+  if (cachedWorkingModels[provider]) return cachedWorkingModels[provider];
+  try {
+    const res = await chrome.storage.local.get(AI_WORKING_MODELS_STORAGE_KEY);
+    const map = (res[AI_WORKING_MODELS_STORAGE_KEY] || {}) as Record<string, string>;
+    if (map[provider]) {
+      cachedWorkingModels[provider] = map[provider];
+      return map[provider];
+    }
+  } catch {
+    // ignore
+  }
+  return undefined;
+}
+
+export async function setPersistentWorkingModel(provider: AIProvider, model: string): Promise<void> {
+  cachedWorkingModels[provider] = model;
+  try {
+    const res = await chrome.storage.local.get(AI_WORKING_MODELS_STORAGE_KEY);
+    const map = (res[AI_WORKING_MODELS_STORAGE_KEY] || {}) as Record<string, string>;
+    map[provider] = model;
+    await chrome.storage.local.set({ [AI_WORKING_MODELS_STORAGE_KEY]: map });
+  } catch {
+    // ignore
+  }
+}
 
 /**
  * Fallback static model lists if network listing is unavailable.
@@ -324,7 +352,7 @@ export async function fetchAvailableModels(
 
 /**
  * Perform AI Complexity & Approach Analysis for a LeetCode submission.
- * Enforces a 15-second timeout with resilient model auto-discovery.
+ * Enforces a 30-second timeout with resilient model auto-discovery.
  */
 export async function analyzeComplexity(
   params: AnalyzeComplexityParams
@@ -346,7 +374,7 @@ export async function analyzeComplexity(
   const userPrompt = `Problem: ${title}\nLanguage: ${language}\n\nSubmitted Solution Code:\n\`\`\`${language}\n${code}\n\`\`\``;
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000);
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
 
   try {
     let rawResponse: string;
@@ -393,7 +421,8 @@ export async function analyzeComplexity(
         if (!endpoint.endsWith("/chat/completions") && !endpoint.includes("generate")) {
           endpoint = endpoint.replace(/\/+$/, "") + "/chat/completions";
         }
-        const modelToUse = rawModel || cachedWorkingModels.custom || "default";
+        const persistentCustom = await getPersistentWorkingModel("custom");
+        const modelToUse = rawModel || persistentCustom || cachedWorkingModels.custom || "default";
         rawResponse = await callOpenAICompatible(
           endpoint,
           apiKey,
@@ -446,14 +475,14 @@ export async function testAiConnection(
   const cleanKey = apiKey.trim();
   const testPrompt = 'Respond with JSON: {"status":"ok"}';
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 12000);
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
 
   try {
     switch (provider) {
       case "gemini": {
-        // Direct key validation via Google Gemini models service
         const testUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(cleanKey)}`;
-        let workingModel = cachedWorkingGeminiModel || rawModel || "gemini-2.0-flash";
+        const persistentGemini = await getPersistentWorkingModel("gemini");
+        let workingModel = persistentGemini || cachedWorkingGeminiModel || rawModel || "gemini-2.0-flash";
         try {
           const res = await fetch(testUrl, {
             method: "GET",
@@ -473,9 +502,9 @@ export async function testAiConnection(
           if (fetchErr instanceof DOMException && fetchErr.name === "AbortError") throw fetchErr;
           if (fetchErr instanceof Error && fetchErr.message.includes("Gemini API Error")) throw fetchErr;
           
-          // Fallback test via generateContent call
           await callGemini(cleanKey, rawModel, testPrompt, controller.signal);
         }
+        await setPersistentWorkingModel("gemini", cachedWorkingGeminiModel || workingModel);
         clearTimeout(timeoutId);
         return { ok: true, model: cachedWorkingGeminiModel || workingModel };
       }
@@ -530,8 +559,10 @@ export async function testAiConnection(
         if (!endpoint.endsWith("/chat/completions") && !endpoint.includes("generate")) {
           endpoint = endpoint.replace(/\/+$/, "") + "/chat/completions";
         }
-        const modelToUse = rawModel || cachedWorkingModels.custom || "default";
+        const persistentCustom = await getPersistentWorkingModel("custom");
+        const modelToUse = rawModel || persistentCustom || cachedWorkingModels.custom || "default";
         await callOpenAICompatible(endpoint, cleanKey, modelToUse, testPrompt, controller.signal);
+        await setPersistentWorkingModel("custom", modelToUse);
         clearTimeout(timeoutId);
         return { ok: true, model: modelToUse };
       }
@@ -559,6 +590,7 @@ async function callGemini(
   signal: AbortSignal
 ): Promise<string> {
   const cleanKey = apiKey.trim();
+  const persistentGemini = await getPersistentWorkingModel("gemini");
   let requestedModel = (model || "").trim().replace(/^models\//, "");
   if (
     !requestedModel ||
@@ -566,25 +598,15 @@ async function callGemini(
     requestedModel.includes("tts") ||
     requestedModel.includes("audio")
   ) {
-    requestedModel = cachedWorkingGeminiModel || "gemini-2.0-flash";
+    requestedModel = persistentGemini || cachedWorkingGeminiModel || "gemini-2.0-flash";
   }
 
   let candidateModels: string[] = [
+    persistentGemini,
     cachedWorkingGeminiModel,
     requestedModel,
     ...getDefaultModelsForProvider("gemini"),
   ].filter((x): x is string => Boolean(x));
-
-  if (!cachedWorkingGeminiModel) {
-    try {
-      const fetched = await fetchAvailableModels("gemini", cleanKey);
-      if (fetched.length > 0) {
-        candidateModels = Array.from(new Set([requestedModel, ...fetched, ...candidateModels]));
-      }
-    } catch {
-      // Continue with candidate models
-    }
-  }
 
   const uniqueModels = Array.from(new Set(candidateModels.filter(Boolean)));
   let lastError: Error | null = null;
@@ -649,13 +671,53 @@ async function callGemini(
         const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
         if (!text) throw new Error("Empty response from Gemini API");
         cachedWorkingGeminiModel = m;
-        cachedWorkingModels.gemini = m;
+        await setPersistentWorkingModel("gemini", m);
         return text;
       } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") throw err;
         lastError = err instanceof Error ? err : new Error(String(err));
         continue;
       }
+    }
+  }
+
+  // Fallback: try fetching models only if all static candidates failed
+  if (!signal.aborted) {
+    try {
+      const fetched = await fetchAvailableModels("gemini", cleanKey);
+      for (const m of fetched) {
+        if (uniqueModels.includes(m)) continue;
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+          m
+        )}:generateContent?key=${encodeURIComponent(cleanKey)}`;
+        try {
+          const res = await fetch(url, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-goog-api-key": cleanKey,
+            },
+            body: JSON.stringify({
+              contents: [{ role: "user", parts: [{ text: `${SYSTEM_PROMPT}\n\n${userPrompt}` }] }],
+              generationConfig: { temperature: 0.1 },
+            }),
+            signal,
+          });
+          if (res.ok) {
+            const data = await res.json();
+            const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (text) {
+              cachedWorkingGeminiModel = m;
+              await setPersistentWorkingModel("gemini", m);
+              return text;
+            }
+          }
+        } catch {
+          // continue
+        }
+      }
+    } catch {
+      // continue
     }
   }
 
@@ -671,25 +733,15 @@ async function callOpenAICompatibleWithFallback(
   signal: AbortSignal
 ): Promise<string> {
   const cleanKey = apiKey.trim();
+  const persistent = await getPersistentWorkingModel(provider);
   const cached = cachedWorkingModels[provider];
   
   let candidates: string[] = [];
   if (preferredModel && preferredModel !== "__custom__") candidates.push(preferredModel);
+  if (persistent && !candidates.includes(persistent)) candidates.push(persistent);
   if (cached && !candidates.includes(cached)) candidates.push(cached);
 
-  // If no working model cached or list is short, fetch live models from API
-  if (candidates.length === 0 || !cached) {
-    try {
-      const liveModels = await fetchAvailableModels(provider, cleanKey);
-      for (const m of liveModels) {
-        if (!candidates.includes(m)) candidates.push(m);
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  // Append defaults as last resort
+  // Append defaults immediately so no discovery latency is added
   for (const m of getDefaultModelsForProvider(provider)) {
     if (!candidates.includes(m)) candidates.push(m);
   }
@@ -700,14 +752,14 @@ async function callOpenAICompatibleWithFallback(
 
     try {
       const res = await callOpenAICompatible(endpointUrl, cleanKey, model, userPrompt, signal);
-      cachedWorkingModels[provider] = model;
+      await setPersistentWorkingModel(provider, model);
       return res;
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") throw err;
       const errMsg = err instanceof Error ? err.message : String(err);
       lastError = err instanceof Error ? err : new Error(errMsg);
 
-      // If model not found, does not exist, rate-limited, or provider error, try next candidate model
+      // If model not found, rate-limited, format issue, or provider error, try next candidate model
       if (
         errMsg.includes("does not exist") ||
         errMsg.includes("not found") ||
@@ -727,6 +779,25 @@ async function callOpenAICompatibleWithFallback(
         continue;
       }
       throw lastError;
+    }
+  }
+
+  // Dynamic discovery only as last resort
+  if (!signal.aborted) {
+    try {
+      const liveModels = await fetchAvailableModels(provider, cleanKey);
+      for (const m of liveModels) {
+        if (candidates.includes(m)) continue;
+        try {
+          const res = await callOpenAICompatible(endpointUrl, cleanKey, m, userPrompt, signal);
+          await setPersistentWorkingModel(provider, m);
+          return res;
+        } catch {
+          // continue
+        }
+      }
+    } catch {
+      // ignore
     }
   }
 

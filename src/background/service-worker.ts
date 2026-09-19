@@ -523,6 +523,16 @@ async function handleMessage(
       // ── 6. Push to GitHub ───────────────────────────────────────────────────
       logger.info(`[LCSync] Starting GitHub sync for ${submission.slug}...`);
       inFlightPushes.add(hash);
+
+      // Immediately register sync start so popup & dashboard update with 0ms delay
+      const startIso = new Date().toISOString();
+      await updateLastSync({
+        title: submission.title,
+        slug: submission.slug,
+        timestamp: startIso,
+        status: "success",
+      });
+
       let pushResult;
       try {
         pushResult = await pushSubmissionToGitHub(submission, token, settings);
