@@ -84,16 +84,17 @@ function populateForm(s: Partial<ExtensionSettings>): void {
   providerSelect.value = provider;
   updateProviderUI(provider);
 
-  if (s.aiModel && s.aiModel !== "gemini-1.5-flash") {
-    ($<HTMLInputElement>("ai-model-input")).value = s.aiModel;
-  } else {
-    ($<HTMLInputElement>("ai-model-input")).value = "";
-  }
+  const savedModel = s.aiModel && s.aiModel !== "gemini-1.5-flash" ? s.aiModel : "";
+  $<HTMLInputElement>("ai-model-input").value = savedModel;
+
   if (s.aiCustomEndpoint) {
-    ($<HTMLInputElement>("ai-endpoint-input")).value = s.aiCustomEndpoint;
+    $<HTMLInputElement>("ai-endpoint-input").value = s.aiCustomEndpoint;
   }
   if (s.aiApiKey) {
-    ($<HTMLInputElement>("ai-key-input")).value = s.aiApiKey;
+    $<HTMLInputElement>("ai-key-input").value = s.aiApiKey;
+    fetchAndPopulateAiModels(provider, s.aiApiKey, savedModel, s.aiCustomEndpoint);
+  } else {
+    populateDefaultModels(provider, savedModel);
   }
 }
 
@@ -416,6 +417,53 @@ function bindEvents(): void {
   $<HTMLSelectElement>("ai-provider-select").addEventListener("change", (e) => {
     const provider = (e.target as HTMLSelectElement).value as AIProvider;
     updateProviderUI(provider);
+
+    // Clear stale custom model from previous provider and reset status
+    $<HTMLInputElement>("ai-model-input").value = "";
+    $("ai-custom-model-container").classList.add("hidden");
+    const statusEl = $("test-ai-status");
+    statusEl.classList.add("hidden");
+    statusEl.textContent = "";
+
+    const apiKey = ($<HTMLInputElement>("ai-key-input")).value.trim();
+    const customEndpoint = ($<HTMLInputElement>("ai-endpoint-input")).value.trim();
+    if (apiKey) {
+      fetchAndPopulateAiModels(provider, apiKey, "", customEndpoint);
+    } else {
+      populateDefaultModels(provider, "");
+    }
+  });
+
+  // AI Model select dropdown change
+  $<HTMLSelectElement>("ai-model-select").addEventListener("change", (e) => {
+    const val = (e.target as HTMLSelectElement).value;
+    const customContainer = $("ai-custom-model-container");
+    if (val === "__custom__") {
+      customContainer.classList.remove("hidden");
+      $<HTMLInputElement>("ai-model-input").focus();
+    } else {
+      customContainer.classList.add("hidden");
+      $<HTMLInputElement>("ai-model-input").value = val;
+    }
+  });
+
+  // Fetch AI Models button
+  $("fetch-ai-models-btn").addEventListener("click", () => {
+    const provider = ($<HTMLSelectElement>("ai-provider-select")).value as AIProvider;
+    const apiKey = ($<HTMLInputElement>("ai-key-input")).value.trim();
+    const customEndpoint = ($<HTMLInputElement>("ai-endpoint-input")).value.trim();
+    const currentModel = getEffectiveAiModel();
+    fetchAndPopulateAiModels(provider, apiKey, currentModel, customEndpoint);
+  });
+
+  // Auto-fetch models on API key paste / blur
+  $<HTMLInputElement>("ai-key-input").addEventListener("blur", () => {
+    const provider = ($<HTMLSelectElement>("ai-provider-select")).value as AIProvider;
+    const apiKey = ($<HTMLInputElement>("ai-key-input")).value.trim();
+    if (apiKey.length > 5) {
+      const customEndpoint = ($<HTMLInputElement>("ai-endpoint-input")).value.trim();
+      fetchAndPopulateAiModels(provider, apiKey, getEffectiveAiModel(), customEndpoint);
+    }
   });
 
   // AI Key toggle
@@ -603,6 +651,14 @@ function toggleAiContainer(show: boolean): void {
   container.classList.toggle("hidden", !show);
 }
 
+function getEffectiveAiModel(): string {
+  const select = $<HTMLSelectElement>("ai-model-select");
+  if (select.value === "__custom__") {
+    return ($<HTMLInputElement>("ai-model-input")).value.trim();
+  }
+  return select.value.trim();
+}
+
 function updateProviderUI(provider: AIProvider): void {
   const defaultModel = DEFAULT_AI_MODELS[provider] || "default";
   const modelInput = $<HTMLInputElement>("ai-model-input");
@@ -610,7 +666,7 @@ function updateProviderUI(provider: AIProvider): void {
   const endpointField = $("ai-endpoint-field");
 
   modelInput.placeholder = defaultModel;
-  modelHint.textContent = `Leave blank to use default model: ${defaultModel}`;
+  modelHint.textContent = `Auto-detects the best working model for ${provider.toUpperCase()}.`;
 
   if (provider === "custom") {
     endpointField.classList.remove("hidden");
@@ -619,10 +675,121 @@ function updateProviderUI(provider: AIProvider): void {
   }
 }
 
+function isModelMatchingProvider(provider: AIProvider, model: string): boolean {
+  if (!model || model === "__custom__") return false;
+  const m = model.toLowerCase();
+  switch (provider) {
+    case "gemini":
+      return m.includes("gemini");
+    case "groq":
+      return (
+        m.includes("llama") ||
+        m.includes("mixtral") ||
+        m.includes("gemma") ||
+        m.includes("deepseek") ||
+        m.includes("qwen") ||
+        m.includes("groq") ||
+        m.includes("compound")
+      );
+    case "openai":
+      return m.startsWith("gpt") || m.startsWith("o1") || m.startsWith("o3");
+    case "anthropic":
+      return m.includes("claude");
+    case "openrouter":
+    case "custom":
+      return true;
+  }
+}
+
+function populateDefaultModels(provider: AIProvider, preselectedModel?: string): void {
+  const select = $<HTMLSelectElement>("ai-model-select");
+  const customContainer = $("ai-custom-model-container");
+
+  select.innerHTML = `
+    <option value="">✨ Auto-detect Best Model (Recommended for ${provider.toUpperCase()})</option>
+    <option value="__custom__">⚙️ Custom / Enter manually…</option>
+  `;
+
+  const isMatching = preselectedModel ? isModelMatchingProvider(provider, preselectedModel) : false;
+
+  if (preselectedModel && isMatching && preselectedModel !== "__custom__") {
+    select.value = "__custom__";
+    customContainer.classList.remove("hidden");
+    $<HTMLInputElement>("ai-model-input").value = preselectedModel;
+  } else {
+    select.value = "";
+    customContainer.classList.add("hidden");
+    $<HTMLInputElement>("ai-model-input").value = "";
+  }
+}
+
+async function fetchAndPopulateAiModels(
+  provider: AIProvider,
+  apiKey: string,
+  preselectedModel?: string,
+  customEndpoint?: string
+): Promise<void> {
+  const select = $<HTMLSelectElement>("ai-model-select");
+  const spinner = $("fetch-models-spinner");
+  const text = $("fetch-models-text");
+  const btn = $<HTMLButtonElement>("fetch-ai-models-btn");
+
+  btn.disabled = true;
+  spinner.classList.remove("hidden");
+  text.textContent = "Fetching…";
+
+  try {
+    const res = await chrome.runtime.sendMessage({
+      type: "FETCH_AI_MODELS",
+      provider,
+      apiKey,
+      customEndpoint,
+    });
+
+    const models: string[] = res?.ok && Array.isArray(res.data) ? res.data : [];
+
+    let html = '<option value="">✨ Auto-detect Best Model (Recommended)</option>';
+    if (models.length > 0) {
+      for (const m of models) {
+        html += `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`;
+      }
+    }
+    html += '<option value="__custom__">⚙️ Custom / Enter manually…</option>';
+    select.innerHTML = html;
+
+    const candidateModel =
+      preselectedModel !== undefined
+        ? preselectedModel
+        : ($<HTMLInputElement>("ai-model-input")).value.trim();
+
+    const isMatching = isModelMatchingProvider(provider, candidateModel);
+
+    if (candidateModel && models.includes(candidateModel)) {
+      select.value = candidateModel;
+      $("ai-custom-model-container").classList.add("hidden");
+      $<HTMLInputElement>("ai-model-input").value = candidateModel;
+    } else if (candidateModel && isMatching && candidateModel !== "__custom__") {
+      select.value = "__custom__";
+      $("ai-custom-model-container").classList.remove("hidden");
+      $<HTMLInputElement>("ai-model-input").value = candidateModel;
+    } else {
+      select.value = "";
+      $("ai-custom-model-container").classList.add("hidden");
+      $<HTMLInputElement>("ai-model-input").value = "";
+    }
+  } catch (err) {
+    logger.warn("Failed to fetch models in options:", err);
+  } finally {
+    btn.disabled = false;
+    spinner.classList.add("hidden");
+    text.textContent = "🔄 Fetch Models";
+  }
+}
+
 async function handleTestAi(): Promise<void> {
   const provider = ($<HTMLSelectElement>("ai-provider-select")).value as AIProvider;
   const apiKey = ($<HTMLInputElement>("ai-key-input")).value.trim();
-  const model = ($<HTMLInputElement>("ai-model-input")).value.trim();
+  const model = getEffectiveAiModel();
   const customEndpoint = ($<HTMLInputElement>("ai-endpoint-input")).value.trim();
 
   const statusEl = $("test-ai-status");
@@ -652,8 +819,16 @@ async function handleTestAi(): Promise<void> {
     });
 
     if (res?.ok) {
-      statusEl.textContent = "Connection successful ✓";
+      const activeModel = res.data?.model;
+      statusEl.textContent = activeModel
+        ? `Connection successful ✓ (Using ${activeModel})`
+        : "Connection successful ✓";
       statusEl.className = "ai-test-status ai-test-status--success";
+
+      // If user had left model empty, update dropdown to show working models list
+      if (!model && apiKey) {
+        fetchAndPopulateAiModels(provider, apiKey, activeModel, customEndpoint);
+      }
     } else {
       statusEl.textContent = res?.error || "Connection failed";
       statusEl.className = "ai-test-status ai-test-status--error";
@@ -842,7 +1017,7 @@ async function saveGeneralSettings(): Promise<void> {
   btn.textContent = "Saving…";
 
   const aiApiKeyInput = $<HTMLInputElement>("ai-key-input").value.trim();
-  const aiModelInput = $<HTMLInputElement>("ai-model-input").value.trim();
+  const aiModelInput = getEffectiveAiModel();
   const aiEndpointInput = $<HTMLInputElement>("ai-endpoint-input").value.trim();
 
   const settings: Partial<ExtensionSettings> = {

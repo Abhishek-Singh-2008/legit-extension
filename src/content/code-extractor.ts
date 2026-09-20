@@ -42,12 +42,19 @@ const KNOWN_LANGUAGES: readonly string[] = [
  * Detects the currently selected programming language on LeetCode.
  */
 export function getCurrentLanguage(): string {
-  // Strategy 1: Search button elements in the editor header for known language names
-  const buttons = document.querySelectorAll("button");
-  for (const btn of buttons) {
-    const text = (btn.textContent ?? "").trim();
+  // Strategy 1: Search button/dropdown elements in the editor header for known language names
+  const langElements = document.querySelectorAll(
+    "button, [role='button'], [data-cy*='lang'], [class*='lang-select'], [class*='text-label'], [class*='select-none'], [class*='cursor-pointer']"
+  );
+  for (const el of langElements) {
+    const text = (el.textContent ?? "").trim();
     for (const lang of KNOWN_LANGUAGES) {
-      if (text === lang || text.startsWith(`${lang}\n`)) {
+      if (
+        text === lang ||
+        text.toLowerCase() === lang.toLowerCase() ||
+        text.startsWith(`${lang}\n`) ||
+        text.startsWith(`${lang} `)
+      ) {
         return lang;
       }
     }
@@ -64,23 +71,32 @@ export function getCurrentLanguage(): string {
     /* localStorage access might be restricted */
   }
 
-  // Strategy 3: Check data attributes or dropdown options
-  const langSelect = document.querySelector('[data-cy="lang-select"], [class*="lang-select"]');
-  if (langSelect?.textContent) {
-    const text = langSelect.textContent.trim();
-    if (text.length > 0) return text;
+  // Strategy 3: Check code element class (e.g. language-python, language-cpp)
+  const codeEl = document.querySelector('[class*="language-"], [class*="lang-"]');
+  if (codeEl) {
+    const cls = codeEl.className;
+    const match = cls.match(/(?:language|lang)-([a-zA-Z0-9+#]+)/i);
+    if (match?.[1]) {
+      const found = match[1].toLowerCase();
+      if (found === "python" || found === "python3") return "Python3";
+      if (found === "cpp" || found === "c++") return "C++";
+      if (found === "java") return "Java";
+      if (found === "javascript" || found === "js") return "JavaScript";
+      if (found === "typescript" || found === "ts") return "TypeScript";
+      return match[1];
+    }
   }
 
-  return "python3"; // Fallback default
+  return "Python3"; // Fallback default
 }
 
-// ── Monaco Editor Code Extractor ──────────────────────────────────────────────
+// ── Monaco Editor & Page Code Extractor ────────────────────────────────────────
 
 export class MonacoCodeExtractor implements CodeExtractor {
   canExtract(): boolean {
     return Boolean(
       document.querySelector(
-        ".monaco-editor, .view-lines, .lines-content, textarea.inputarea, [class*='editor']"
+        ".monaco-editor, .view-lines, .lines-content, textarea.inputarea, [class*='editor'], pre, code, .cm-content, [class*='code-container']"
       )
     );
   }
@@ -99,7 +115,30 @@ export class MonacoCodeExtractor implements CodeExtractor {
       }
     }
 
-    // 2. Scan ALL .monaco-editor and editor containers on screen
+    // 2. Scan CodeMirror 6 or custom editor lines
+    const cmLines = document.querySelectorAll(".cm-content, .cm-line");
+    if (cmLines.length > 0) {
+      const cmText = Array.from(cmLines)
+        .map((el) => el.textContent ?? "")
+        .join("\n");
+      if (cmText.trim().length > 0) {
+        candidates.push(cmText.trim());
+      }
+    }
+
+    // 3. Scan <pre> and <code> blocks (often used on /submissions/<id>/ pages)
+    const codeBlocks = document.querySelectorAll(
+      "pre code, pre, [class*='submission-code'], [class*='code-area'], [class*='syntax-highlighter'], [class*='code-container']"
+    );
+    for (const block of codeBlocks) {
+      const text = (block as HTMLElement).innerText ?? block.textContent;
+      if (text && text.trim().length > 0) {
+        const cleaned = text.replace(/\u00a0/g, " ").trim();
+        if (cleaned.length > 0) candidates.push(cleaned);
+      }
+    }
+
+    // 4. Scan ALL .monaco-editor and editor containers on screen
     const editors = document.querySelectorAll(
       ".monaco-editor, [class*='editor-container'], [class*='code-editor']"
     );
@@ -111,7 +150,7 @@ export class MonacoCodeExtractor implements CodeExtractor {
       }
     }
 
-    // 3. Scan textareas
+    // 5. Scan textareas
     const textareas = document.querySelectorAll<HTMLTextAreaElement>(
       "textarea.inputarea, textarea"
     );
@@ -121,7 +160,7 @@ export class MonacoCodeExtractor implements CodeExtractor {
       }
     }
 
-    // 4. Try window.monaco via page script if available
+    // 6. Try window.monaco via page script if available
     const blobCode = extractCodeViaBlobScript();
     if (blobCode && blobCode.trim().length > 0) {
       candidates.push(blobCode.trim());

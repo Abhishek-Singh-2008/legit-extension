@@ -132,15 +132,16 @@ watchSubmissionResult({
 
       logger.info(`[LCSync] Accepted: ${problem.title} (${problem.difficulty})`);
       
-      // 1. Try direct Monaco editor extraction for real-time code and comments
+      // 1. Try direct Monaco editor / DOM extraction for real-time code and comments
       const monacoExtractor = new MonacoCodeExtractor();
       let code = monacoExtractor.canExtract() ? monacoExtractor.extractCode() : null;
       let language = getCurrentLanguage();
 
       // 2. Fallback to LeetCode GraphQL API if editor extraction is empty
       if (!code || code.trim().length === 0) {
-        logger.info("[LCSync] Fetching code from LeetCode GraphQL API...");
-        const result = await fetchAcceptedCode(problem.slug);
+        const urlSubmissionId = location.pathname.match(/\/submissions\/(\d+)/)?.[1];
+        logger.info(`[LCSync] Fetching code from LeetCode GraphQL API (submissionId: ${urlSubmissionId ?? "latest"})...`);
+        const result = await fetchAcceptedCode(problem.slug, urlSubmissionId);
         if (result?.code) {
           code = result.code;
           language = result.language;

@@ -24,7 +24,7 @@ import {
 } from "@/storage/storage";
 import { verifyToken, verifyRepoAccess, GitHubAuthError } from "@/github/github-auth";
 import { requestDeviceCode, pollDeviceToken } from "@/github/github-device-flow";
-import { testAiConnection } from "@/ai/ai-client";
+import { testAiConnection, fetchAvailableModels } from "@/ai/ai-client";
 import { GitHubApiClientImpl } from "@/github/github-api";
 import { pushSubmissionToGitHub } from "@/github/github-push";
 import { sha256 } from "@/utils/hash";
@@ -51,6 +51,7 @@ export type BackgroundMessage =
   | { type: "START_DEVICE_FLOW"; clientId?: string }
   | { type: "POLL_DEVICE_FLOW"; deviceCode: string; clientId?: string }
   | { type: "TEST_AI_KEY"; provider: AIProvider; apiKey: string; model?: string; customEndpoint?: string }
+  | { type: "FETCH_AI_MODELS"; provider: AIProvider; apiKey: string; customEndpoint?: string }
   | { type: "DISCONNECT_GITHUB" }
   | { type: "GET_USER_REPOS" }
   | { type: "GET_REPO_BRANCHES"; repo: string }
@@ -221,9 +222,23 @@ async function handleMessage(
         customEndpoint: message.customEndpoint,
       });
       if (testResult.ok) {
-        return { ok: true };
+        return { ok: true, data: { model: testResult.model } };
       }
       return { ok: false, error: testResult.error || "Failed to connect to AI provider" };
+    }
+
+    case "FETCH_AI_MODELS": {
+      logger.info(`[AI] Fetching models for provider ${message.provider}...`);
+      try {
+        const models = await fetchAvailableModels(
+          message.provider,
+          message.apiKey,
+          message.customEndpoint
+        );
+        return { ok: true, data: models };
+      } catch (err) {
+        return { ok: false, error: getErrorMessage(err) };
+      }
     }
 
     case "DISCONNECT_GITHUB": {
@@ -508,6 +523,16 @@ async function handleMessage(
       // ── 6. Push to GitHub ───────────────────────────────────────────────────
       logger.info(`[LCSync] Starting GitHub sync for ${submission.slug}...`);
       inFlightPushes.add(hash);
+
+      // Immediately register sync start so popup & dashboard update with 0ms delay
+      const startIso = new Date().toISOString();
+      await updateLastSync({
+        title: submission.title,
+        slug: submission.slug,
+        timestamp: startIso,
+        status: "success",
+      });
+
       let pushResult;
       try {
         pushResult = await pushSubmissionToGitHub(submission, token, settings);
