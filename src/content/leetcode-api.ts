@@ -101,20 +101,31 @@ export async function getCurrentUsername(): Promise<string | null> {
     } catch { /* ignore */ }
   }
 
-  // Strategy 3: Profile link in nav
-  const profileLinks = document.querySelectorAll<HTMLAnchorElement>('a[href^="/u/"]');
+  // Strategy 3: Check submission author text in DOM (e.g., "Abhishek_2008 submitted at ...")
+  const authorEls = document.querySelectorAll("div, span, p, a");
+  for (const el of authorEls) {
+    if (el.children.length > 1) continue;
+    const text = el.textContent?.trim() ?? "";
+    const submitMatch = text.match(/^([a-zA-Z0-9_-]+)\s+submitted at/i);
+    if (submitMatch?.[1]) {
+      return submitMatch[1];
+    }
+  }
+
+  // Strategy 4: Profile links in nav
+  const profileLinks = document.querySelectorAll<HTMLAnchorElement>('a[href*="/u/"], a[href*="/profile/"]');
   for (const link of profileLinks) {
-    const match = link.href.match(/\/u\/([^/?#]+)/);
+    const match = link.href.match(/\/(?:u|profile)\/([^/?#]+)/);
     if (match?.[1]) return match[1];
   }
 
-  // Strategy 4: Ask the GraphQL API
+  // Strategy 5: Ask the GraphQL API
   try {
     const data = await graphql<{ userStatus: { username: string } }>(
       `query { userStatus { username } }`,
       {}
     );
-    if (data.userStatus.username) return data.userStatus.username;
+    if (data.userStatus?.username) return data.userStatus.username;
   } catch (err) {
     logger.warn("[LeetCodeAPI] Could not fetch username via GraphQL:", err);
   }
@@ -192,9 +203,9 @@ export async function fetchLatestAcceptedSubmission(
 /**
  * Fetches the code and language for a specific submission ID.
  */
-async function fetchSubmissionDetail(
+export async function fetchSubmissionDetail(
   submissionId: string,
-  langName: string
+  langName: string = ""
 ): Promise<SubmissionDetail | null> {
   logger.info(`[LeetCodeAPI] Fetching details for submission #${submissionId}...`);
 
@@ -224,10 +235,21 @@ async function fetchSubmissionDetail(
  * High-level helper: gets code for the current problem after acceptance.
  * Returns null if username or code cannot be found.
  */
-export async function fetchAcceptedCode(slug: string): Promise<{
+export async function fetchAcceptedCode(
+  slug: string,
+  submissionId?: string
+): Promise<{
   code: string;
   language: string;
 } | null> {
+  // If specific submissionId is known (e.g. from URL /submissions/<id>/), fetch directly
+  if (submissionId && /^\d+$/.test(submissionId)) {
+    const detail = await fetchSubmissionDetail(submissionId);
+    if (detail?.code) {
+      return { code: detail.code, language: detail.language };
+    }
+  }
+
   const username = await getCurrentUsername();
   if (!username) {
     logger.error("[LeetCodeAPI] Cannot fetch code: not logged in or username not found.");

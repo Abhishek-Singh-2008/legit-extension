@@ -58,20 +58,24 @@ export function watchSubmissionResult(
     const target = e.target as HTMLElement | null;
     if (!target) return;
 
-    const button = target.closest("button");
+    // Search for button or interactive element that triggers submission
+    const button = target.closest("button, [role='button'], [data-e2e-locator*='submit'], [data-cy*='submit']");
     if (!button) return;
 
     const label = (button.getAttribute("aria-label") ?? "").toLowerCase();
     const dataLocator = (button.getAttribute("data-e2e-locator") ?? "").toLowerCase();
+    const dataCy = (button.getAttribute("data-cy") ?? "").toLowerCase();
     const text = (button.textContent ?? "").trim().toLowerCase();
 
     if (
       label === "submit" ||
-      dataLocator === "console-submit-button" ||
+      label.includes("submit") ||
+      dataLocator.includes("submit") ||
+      dataCy.includes("submit") ||
       text === "submit" ||
       text.includes("submit")
     ) {
-      logger.info("[SubmissionDetector] Submit button clicked!");
+      logger.info("[SubmissionDetector] Submit action detected!");
       isSubmitting = true;
       hasReportedForCurrentSubmit = false;
       lastProcessedKey = ""; // Reset to allow fresh detection for new submission
@@ -110,16 +114,11 @@ export function watchSubmissionResult(
       return;
     }
 
-    // Only process if user actively submitted OR if a new submission result appeared
-    if (!isSubmitting && !verdict.isFresh) {
-      return;
-    }
-
     lastProcessedKey = submissionKey;
     isSubmitting = false;
     hasReportedForCurrentSubmit = true;
 
-    logger.info(`[SubmissionDetector] Submission verdict detected: ${verdict.status}`);
+    logger.info(`[SubmissionDetector] Submission verdict detected: ${verdict.status} (${submissionKey})`);
 
     if (verdict.status === "Accepted") {
       callbacks.onAccepted("Accepted");
@@ -139,8 +138,9 @@ export function watchSubmissionResult(
     characterData: true,
   });
 
-  // Run initial check in case result is already on screen
+  // Run initial checks on load and after initial delay
   setTimeout(checkResultDOM, 500);
+  setTimeout(checkResultDOM, 1500);
 
   // Cleanup
   return () => {
@@ -165,7 +165,7 @@ interface FoundVerdict {
  */
 function findVerdictInDOM(): FoundVerdict | null {
   // Strategy A: data-e2e-locator="submission-result"
-  const e2eEl = document.querySelector('[data-e2e-locator="submission-result"]');
+  const e2eEl = document.querySelector('[data-e2e-locator="submission-result"], [data-cy="submission-result-status"]');
   if (e2eEl) {
     const text = e2eEl.textContent?.trim() ?? "";
     const status = parseSubmissionStatus(text);
@@ -179,16 +179,22 @@ function findVerdictInDOM(): FoundVerdict | null {
   }
 
   // Strategy B: CSS class design tokens for status
-  // LeetCode uses classes like text-sd-easy / text-fixed-positive for Accepted
-  // and text-sd-hard / text-fixed-negative for Wrong Answer / Errors
   const statusSelectors = [
     ".text-sd-easy",
     ".text-fixed-positive",
+    ".text-green-s",
+    ".text-green-500",
+    ".text-green-600",
+    ".text-olive",
     ".text-sd-hard",
     ".text-fixed-negative",
+    ".text-red-s",
+    ".text-red-500",
+    ".text-pink",
     '[class*="submission-result"]',
     '[class*="result-state"]',
-    '[data-cy="submission-result-status"]',
+    '[class*="result-container"]',
+    '[data-e2e-locator*="result"]',
   ];
 
   for (const selector of statusSelectors) {
@@ -196,7 +202,7 @@ function findVerdictInDOM(): FoundVerdict | null {
     for (const el of elements) {
       const text = el.textContent?.trim() ?? "";
       const status = parseSubmissionStatus(text);
-      if (status) {
+      if (status && isInsideSubmissionPanel(el)) {
         return {
           status,
           identifier: getElementIdentifier(el),
@@ -206,24 +212,21 @@ function findVerdictInDOM(): FoundVerdict | null {
     }
   }
 
-  // Strategy C: Inspect submission result container headings or tabs
-  const headings = document.querySelectorAll("div, span, h3, h4");
+  // Strategy C: Inspect submission result container headings or text elements
+  const headings = document.querySelectorAll("div, span, h3, h4, p");
   for (const el of headings) {
-    // Only check elements with direct text or simple child node
     if (el.children.length > 2) continue;
 
     const text = el.textContent?.trim() ?? "";
-    if (text.length === 0 || text.length > 50) continue;
+    if (text.length === 0 || text.length > 60) continue;
 
-    // Check exact text matching known status
     for (const [key, status] of Object.entries(STATUS_MAP)) {
-      if (text.toLowerCase() === key || text.toLowerCase().startsWith(`${key} `)) {
-        // Ensure this is inside a submission result panel/container
+      if (text.toLowerCase() === key || text.toLowerCase().startsWith(`${key} `) || text.toLowerCase().startsWith(key)) {
         if (isInsideSubmissionPanel(el)) {
           return {
             status,
             identifier: getElementIdentifier(el),
-            isFresh: false,
+            isFresh: true,
           };
         }
       }
@@ -246,12 +249,17 @@ function getElementIdentifier(el: Element): string {
  * Checks if an element is located inside a submission result container or panel.
  */
 function isInsideSubmissionPanel(el: Element): boolean {
+  if (location.pathname.includes("/submissions/")) {
+    return true;
+  }
+
   let current: Element | null = el;
   let depth = 0;
   while (current && depth < 8) {
     const cls = current.className ? String(current.className).toLowerCase() : "";
     const id = current.id ? String(current.id).toLowerCase() : "";
     const dataPath = current.getAttribute("data-layout-path") ?? "";
+    const dataLocator = current.getAttribute("data-e2e-locator") ?? "";
 
     if (
       cls.includes("result") ||
@@ -259,7 +267,9 @@ function isInsideSubmissionPanel(el: Element): boolean {
       id.includes("result") ||
       id.includes("submission") ||
       dataPath.includes("result") ||
-      current.getAttribute("data-e2e-locator")?.includes("result")
+      dataPath.includes("submission") ||
+      dataLocator.includes("result") ||
+      dataLocator.includes("submission")
     ) {
       return true;
     }
@@ -268,3 +278,4 @@ function isInsideSubmissionPanel(el: Element): boolean {
   }
   return false;
 }
+
