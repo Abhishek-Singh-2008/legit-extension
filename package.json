@@ -7,6 +7,7 @@
     "dev": "vite build --watch",
     "build": "tsc --noEmit && vite build && node scripts/postbuild.mjs",
     "build:fast": "vite build && node scripts/postbuild.mjs",
+    "package": "npm run build && node scripts/create-zip.mjs",
     "typecheck": "tsc --noEmit",
     "clean": "rimraf dist"
   },

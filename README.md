@@ -65,8 +65,8 @@ Legit connects directly from your browser to GitHub via the official GitHub REST
 
 Legit includes built-in Multi-Provider AI analysis that automatically evaluates your accepted code upon submission:
 
-- **Time Complexity** (e.g. $\mathcal{O}(n \log n)$)
-- **Space Complexity** (e.g. $\mathcal{O}(1)$)
+- **Time Complexity** (e.g. `O(n log n)`)
+- **Space Complexity** (e.g. `O(1)`)
 - **Approach & Intuition** (A clean 2-3 sentence algorithmic summary)
 
 ### Supported AI Providers
