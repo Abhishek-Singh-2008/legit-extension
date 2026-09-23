@@ -50,6 +50,7 @@ export function watchSubmissionResult(
   logger.info("[SubmissionDetector] Initializing submission watcher...");
 
   let isSubmitting = false;
+  let submitTimestamp = 0;
   let hasReportedForCurrentSubmit = false;
   let lastProcessedKey = "";
 
@@ -67,6 +68,19 @@ export function watchSubmissionResult(
     const dataCy = (button.getAttribute("data-cy") ?? "").toLowerCase();
     const text = (button.textContent ?? "").trim().toLowerCase();
 
+    // Ensure it is specifically a SUBMIT action, NOT a RUN action
+    const isRun =
+      dataLocator.includes("run") ||
+      dataCy.includes("run") ||
+      label.includes("run") ||
+      text === "run" ||
+      text === "run code";
+
+    if (isRun) {
+      logger.debug("[SubmissionDetector] Run button clicked (testcase only) — ignoring.");
+      return;
+    }
+
     if (
       label === "submit" ||
       label.includes("submit") ||
@@ -77,16 +91,18 @@ export function watchSubmissionResult(
     ) {
       logger.info("[SubmissionDetector] Submit action detected!");
       isSubmitting = true;
+      submitTimestamp = Date.now();
       hasReportedForCurrentSubmit = false;
       lastProcessedKey = ""; // Reset to allow fresh detection for new submission
     }
   };
 
   const handleKeyDown = (e: KeyboardEvent): void => {
-    // Detect Ctrl+Enter or Cmd+Enter for code submission
+    // Detect Ctrl+Enter or Cmd+Enter for code submission (Ctrl+' is Run Code, ignore)
     if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
       logger.info("[SubmissionDetector] Submit keyboard shortcut detected (Ctrl/Cmd + Enter)");
       isSubmitting = true;
+      submitTimestamp = Date.now();
       hasReportedForCurrentSubmit = false;
       lastProcessedKey = ""; // Reset to allow fresh detection for new submission
     }
@@ -99,6 +115,18 @@ export function watchSubmissionResult(
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   const checkResultDOM = (): void => {
+    // Only evaluate if user is actively submitting OR on a direct submission permalink URL
+    const isSubmissionPage = location.pathname.includes("/submissions/");
+    if (!isSubmitting && !isSubmissionPage) {
+      return;
+    }
+
+    // If submit happened more than 60 seconds ago without a verdict, expire it
+    if (isSubmitting && Date.now() - submitTimestamp > 60000) {
+      isSubmitting = false;
+      return;
+    }
+
     const verdict = findVerdictInDOM();
     if (!verdict) return;
 
@@ -109,7 +137,7 @@ export function watchSubmissionResult(
       return;
     }
 
-    // Prevent duplicate processing of the same result UNLESS user actively pressed Submit
+    // Prevent duplicate processing of the same result
     if (!isSubmitting && submissionKey === lastProcessedKey) {
       return;
     }
@@ -138,10 +166,6 @@ export function watchSubmissionResult(
     characterData: true,
   });
 
-  // Run initial checks on load and after initial delay
-  setTimeout(checkResultDOM, 500);
-  setTimeout(checkResultDOM, 1500);
-
   // Cleanup
   return () => {
     document.removeEventListener("click", handleClick, true);
@@ -161,15 +185,15 @@ interface FoundVerdict {
 }
 
 /**
- * Searches the DOM for submission result containers.
+ * Searches the DOM for submission result containers and verifies full testcase pass.
  */
 function findVerdictInDOM(): FoundVerdict | null {
   // Strategy A: data-e2e-locator="submission-result"
   const e2eEl = document.querySelector('[data-e2e-locator="submission-result"], [data-cy="submission-result-status"]');
-  if (e2eEl) {
+  if (e2eEl && isInsideSubmissionPanel(e2eEl)) {
     const text = e2eEl.textContent?.trim() ?? "";
     const status = parseSubmissionStatus(text);
-    if (status) {
+    if (status && verifyAllTestCasesPassed(e2eEl, status)) {
       return {
         status,
         identifier: getElementIdentifier(e2eEl),
@@ -178,7 +202,7 @@ function findVerdictInDOM(): FoundVerdict | null {
     }
   }
 
-  // Strategy B: CSS class design tokens for status
+  // Strategy B: CSS class design tokens for status in submission panels
   const statusSelectors = [
     ".text-sd-easy",
     ".text-fixed-positive",
@@ -200,9 +224,10 @@ function findVerdictInDOM(): FoundVerdict | null {
   for (const selector of statusSelectors) {
     const elements = document.querySelectorAll(selector);
     for (const el of elements) {
+      if (!isInsideSubmissionPanel(el)) continue;
       const text = el.textContent?.trim() ?? "";
       const status = parseSubmissionStatus(text);
-      if (status && isInsideSubmissionPanel(el)) {
+      if (status && verifyAllTestCasesPassed(el, status)) {
         return {
           status,
           identifier: getElementIdentifier(el),
@@ -216,13 +241,18 @@ function findVerdictInDOM(): FoundVerdict | null {
   const headings = document.querySelectorAll("div, span, h3, h4, p");
   for (const el of headings) {
     if (el.children.length > 2) continue;
+    if (!isInsideSubmissionPanel(el)) continue;
 
     const text = el.textContent?.trim() ?? "";
     if (text.length === 0 || text.length > 60) continue;
 
     for (const [key, status] of Object.entries(STATUS_MAP)) {
-      if (text.toLowerCase() === key || text.toLowerCase().startsWith(`${key} `) || text.toLowerCase().startsWith(key)) {
-        if (isInsideSubmissionPanel(el)) {
+      if (
+        text.toLowerCase() === key ||
+        text.toLowerCase().startsWith(`${key} `) ||
+        text.toLowerCase().startsWith(key)
+      ) {
+        if (verifyAllTestCasesPassed(el, status)) {
           return {
             status,
             identifier: getElementIdentifier(el),
@@ -237,6 +267,35 @@ function findVerdictInDOM(): FoundVerdict | null {
 }
 
 /**
+ * Ensures that if status is "Accepted", all testcases actually passed (e.g., "65 / 65 testcases passed").
+ * Rejects partial testcase runs or wrong answer states.
+ */
+function verifyAllTestCasesPassed(el: Element, status: SubmissionStatus): boolean {
+  if (status !== "Accepted") {
+    return true; // For rejected verdicts, allow status through so onRejected can handle it
+  }
+
+  // Search surrounding container for testcase indicators (e.g. "65 / 65 testcases passed")
+  const container = el.closest('[data-e2e-locator="submission-result"]') ?? el.parentElement?.parentElement ?? el.parentElement;
+  if (container) {
+    const containerText = container.textContent ?? "";
+    
+    // Check if testcases ratio like "35 / 65" or "65 / 65" exists
+    const tcMatch = containerText.match(/(\d+)\s*\/\s*(\d+)\s*testcases\s*passed/i);
+    if (tcMatch) {
+      const passed = parseInt(tcMatch[1], 10);
+      const total = parseInt(tcMatch[2], 10);
+      if (total > 0 && passed < total) {
+        logger.warn(`[SubmissionDetector] Testcases mismatch: ${passed}/${total} passed — not fully accepted.`);
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+/**
  * Generate a unique fingerprint for a result element to prevent duplicate triggers.
  */
 function getElementIdentifier(el: Element): string {
@@ -246,7 +305,8 @@ function getElementIdentifier(el: Element): string {
 }
 
 /**
- * Checks if an element is located inside a submission result container or panel.
+ * Checks if an element is located inside a submission result container or panel,
+ * and NOT inside the "Run Code" / testcase runner panel.
  */
 function isInsideSubmissionPanel(el: Element): boolean {
   if (location.pathname.includes("/submissions/")) {
@@ -255,11 +315,22 @@ function isInsideSubmissionPanel(el: Element): boolean {
 
   let current: Element | null = el;
   let depth = 0;
-  while (current && depth < 8) {
+  while (current && depth < 10) {
     const cls = current.className ? String(current.className).toLowerCase() : "";
     const id = current.id ? String(current.id).toLowerCase() : "";
-    const dataPath = current.getAttribute("data-layout-path") ?? "";
-    const dataLocator = current.getAttribute("data-e2e-locator") ?? "";
+    const dataPath = (current.getAttribute("data-layout-path") ?? "").toLowerCase();
+    const dataLocator = (current.getAttribute("data-e2e-locator") ?? "").toLowerCase();
+
+    // Explicitly exclude "Run Code" testcase console tabs/panels
+    if (
+      dataPath.includes("testcase") ||
+      dataPath.includes("console") ||
+      dataLocator.includes("console-result") ||
+      cls.includes("test-case") ||
+      cls.includes("console-tab")
+    ) {
+      return false;
+    }
 
     if (
       cls.includes("result") ||
@@ -278,4 +349,5 @@ function isInsideSubmissionPanel(el: Element): boolean {
   }
   return false;
 }
+
 

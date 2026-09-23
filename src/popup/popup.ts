@@ -12,6 +12,14 @@ import type { ExtensionSettings, SyncHistoryRecord, SyncStats } from "@/types/se
 import type { LeetCodeProblem } from "@/types/leetcode";
 import type { ConnectionStatus } from "@/storage/storage";
 
+import {
+  loadSettings,
+  loadConnectionStatus,
+  loadCurrentProblem,
+  loadSyncHistory,
+  loadSyncStats,
+} from "@/storage/storage";
+
 // ── DOM Helpers ───────────────────────────────────────────────────────────────
 
 function $<T extends Element>(selector: string): T | null {
@@ -38,54 +46,51 @@ function initVersion(): void {
 
 async function loadAndRender(): Promise<void> {
   try {
-    const [connRes, settingsRes, problemRes, historyRes, statsRes] = await Promise.all([
-      chrome.runtime.sendMessage({ type: "GET_CONNECTION_STATUS" }),
-      chrome.runtime.sendMessage({ type: "GET_SETTINGS" }),
-      chrome.runtime.sendMessage({ type: "GET_CURRENT_PROBLEM" }),
-      chrome.runtime.sendMessage({ type: "GET_SYNC_HISTORY", limit: 5 }),
-      chrome.runtime.sendMessage({ type: "GET_SYNC_STATS" }),
+    // Read directly from storage to eliminate service worker cold-start / IPC latency
+    const [connStatus, settings, storedProblem, history, stats, activeTabs] = await Promise.all([
+      loadConnectionStatus().catch(() => ({ connected: false })),
+      loadSettings().catch(() => ({})),
+      loadCurrentProblem().catch(() => null),
+      loadSyncHistory(5).catch(() => []),
+      loadSyncStats().catch(() => ({
+        total: 0,
+        success: 0,
+        failed: 0,
+        duplicate: 0,
+        skipped: 0,
+        authFailed: 0,
+        byDifficulty: { Easy: 0, Medium: 0, Hard: 0 },
+        byLanguage: {},
+      })),
+      chrome.tabs.query({ active: true, currentWindow: true }).catch(() => []),
     ]);
 
-    if (connRes?.ok) {
-      renderConnection(connRes.data as ConnectionStatus);
-    }
-    if (settingsRes?.ok) {
-      renderSettings(settingsRes.data as Partial<ExtensionSettings>);
-    }
+    renderConnection(connStatus as ConnectionStatus);
+    renderSettings(settings as Partial<ExtensionSettings>);
 
-    let currentProblem: LeetCodeProblem | null = problemRes?.ok
-      ? (problemRes.data as LeetCodeProblem)
-      : null;
+    let currentProblem: LeetCodeProblem | null = storedProblem;
 
-    try {
-      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (activeTab?.url) {
-        const slug = slugFromUrl(activeTab.url);
-        if (slug) {
-          currentProblem = {
-            title: slugToTitle(slug),
-            slug,
-            difficulty: currentProblem?.slug === slug ? currentProblem.difficulty : "Easy",
-            url: `https://leetcode.com/problems/${slug}/`,
-          };
-        }
+    const activeTab = activeTabs?.[0];
+    if (activeTab?.url) {
+      const slug = slugFromUrl(activeTab.url);
+      if (slug) {
+        currentProblem = {
+          title: slugToTitle(slug),
+          slug,
+          difficulty: currentProblem?.slug === slug ? currentProblem.difficulty : "Easy",
+          url: `https://leetcode.com/problems/${slug}/`,
+        };
       }
-    } catch {
-      // Fallback to storage
     }
 
     renderProblem(currentProblem);
-
-    if (statsRes?.ok) {
-      renderStats(statsRes.data as SyncStats);
-    }
-    if (historyRes?.ok) {
-      renderHistory(historyRes.data as SyncHistoryRecord[]);
-    }
+    renderStats(stats as SyncStats);
+    renderHistory(history as SyncHistoryRecord[]);
   } catch (err) {
     logger.error("Failed to load popup data:", err);
   }
 }
+
 
 // ── Renderers ─────────────────────────────────────────────────────────────────
 

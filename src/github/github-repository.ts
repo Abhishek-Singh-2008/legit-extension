@@ -19,7 +19,8 @@ export interface FilePaths {
 export function getFilePaths(
   submission: Pick<LeetCodeSubmission, "slug" | "language" | "difficulty">,
   baseDirectory: string,
-  folderFormat: FolderFormat
+  folderFormat: FolderFormat,
+  version?: number
 ): FilePaths {
   const ext = languageToExtension(submission.language);
 
@@ -38,8 +39,10 @@ export function getFilePaths(
   }
 
   const base = baseDirectory ? `${baseDirectory}/` : "";
+  const filename = !version || version <= 1 ? `solution.${ext}` : `solution_${version}.${ext}`;
   return {
-    solutionPath: `${base}${folder}/solution.${ext}`,
+    solutionPath: `${base}${folder}/${filename}`,
     readmePath: `${base}${folder}/README.md`,
   };
 }
+

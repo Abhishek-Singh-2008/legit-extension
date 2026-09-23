@@ -25,6 +25,31 @@ import type { ExtensionSettings } from "@/types/settings";
 export interface PushResult {
   commitUrl: string;
   solutionPath: string;
+  isDuplicate?: boolean;
+}
+
+/**
+ * Base64 decoder with UTF-8 support for comparing existing GitHub files.
+ */
+function decodeBase64(b64: string): string {
+  try {
+    const cleanB64 = b64.replace(/[\r\n\s]/g, "");
+    const binary = atob(cleanB64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return new TextDecoder().decode(bytes);
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Normalizes code by standardizing newlines and trimming whitespace for comparison.
+ */
+function normalizeCode(code: string): string {
+  return code.replace(/\r\n/g, "\n").trim();
 }
 
 /**
@@ -33,10 +58,11 @@ export interface PushResult {
  * Steps:
  *   1. Read repo owner/name/branch from settings (never hardcoded)
  *   2. Validate non-empty solution code
- *   3. Resolve file paths from folder format settings
- *   4. Create or update the solution file
- *   5. Optionally create or update README.md
- *   6. Return the commit URL and solution path
+ *   3. Resolve file paths with Multi-Solution versioning (solution.py, solution_2.py...)
+ *   4. Check if exact same code already exists in repo -> return isDuplicate
+ *   5. Create the solution file (or versioned file)
+ *   6. Optionally create or update README.md
+ *   7. Return the commit URL and solution path
  *
  * Throws ConfigurationError if repository is not configured.
  * Throws AuthExpiredError on HTTP 401.
@@ -65,23 +91,73 @@ export async function pushSubmissionToGitHub(
 
   const repo = `${owner}/${name}`;
   const client = new GitHubApiClientImpl(token);
+  const baseDir = settings.baseDirectory ?? "algorithms";
+  const folderFormat = settings.folderFormat ?? "{slug}";
+  const normalizedNewCode = normalizeCode(submission.code);
 
-  // ── Resolve file paths ────────────────────────────────────────────────────
-  const { solutionPath, readmePath } = getFilePaths(
-    submission,
-    settings.baseDirectory ?? "algorithms",
-    settings.folderFormat ?? "{slug}"
-  );
+  // ── Multi-Solution / Versioning Resolution (Option B) ─────────────────────
+  let targetVersion = 1;
+  let targetPaths = getFilePaths(submission, baseDir, folderFormat, 1);
+  let targetPath = targetPaths.solutionPath;
+  const readmePath = targetPaths.readmePath;
+
+  try {
+    // Check version 1 (solution.<ext>)
+    const firstFile = await client.getFile(repo, targetPath, branch);
+    if (firstFile) {
+      const firstCode = normalizeCode(decodeBase64(firstFile.content));
+      if (firstCode === normalizedNewCode) {
+        logger.info(`[LCSync] Submission code identical to existing ${targetPath} — skipping push.`);
+        return {
+          commitUrl: `https://github.com/${repo}/blob/${branch}/${targetPath}`,
+          solutionPath: targetPath,
+          isDuplicate: true,
+        };
+      }
+
+      // Version 1 exists and has different code. Check higher version slots (solution_2, solution_3, ...)
+      let foundSlot = false;
+      for (let v = 2; v <= 20; v++) {
+        const vPaths = getFilePaths(submission, baseDir, folderFormat, v);
+        const vFile = await client.getFile(repo, vPaths.solutionPath, branch);
+        if (!vFile) {
+          targetVersion = v;
+          targetPath = vPaths.solutionPath;
+          foundSlot = true;
+          break;
+        }
+        const vCode = normalizeCode(decodeBase64(vFile.content));
+        if (vCode === normalizedNewCode) {
+          logger.info(`[LCSync] Submission code identical to existing ${vPaths.solutionPath} — skipping push.`);
+          return {
+            commitUrl: `https://github.com/${repo}/blob/${branch}/${vPaths.solutionPath}`,
+            solutionPath: vPaths.solutionPath,
+            isDuplicate: true,
+          };
+        }
+      }
+
+      if (!foundSlot) {
+        targetVersion = 21;
+        targetPath = getFilePaths(submission, baseDir, folderFormat, targetVersion).solutionPath;
+      }
+    }
+  } catch (err) {
+    logger.warn("[LCSync] Error checking existing version files, proceeding with default path:", err);
+  }
 
   logger.info(`[LCSync] Starting GitHub sync for ${submission.title}`);
   logger.info(`[LCSync] Target repository: ${repo} @ ${branch}`);
-  logger.info(`[LCSync] Target solution path: ${solutionPath}`);
+  logger.info(`[LCSync] Target solution path: ${targetPath} (version ${targetVersion})`);
 
   // ── Build commit message ──────────────────────────────────────────────────
-  const commitMessage = formatCommitMessage(
+  let commitMessage = formatCommitMessage(
     settings.commitMessageFormat ?? "feat: add {title} solution",
     submission
   );
+  if (targetVersion > 1) {
+    commitMessage = `${commitMessage} (v${targetVersion})`;
+  }
 
   try {
     // ── Launch AI complexity analysis concurrently with solution upload ─────
@@ -115,7 +191,7 @@ export async function pushSubmissionToGitHub(
     const solutionCommit = await safePutFile(
       client,
       repo,
-      solutionPath,
+      targetPath,
       submission.code,
       commitMessage,
       branch
@@ -144,7 +220,7 @@ export async function pushSubmissionToGitHub(
     }
 
     logger.info("[LCSync] GitHub sync completed successfully");
-    return { commitUrl, solutionPath };
+    return { commitUrl, solutionPath: targetPath, isDuplicate: false };
   } catch (err) {
     if (err instanceof GitHubApiError) {
       if (err.statusCode === 401) {
@@ -156,6 +232,7 @@ export async function pushSubmissionToGitHub(
     throw err;
   }
 }
+
 
 /**
  * Puts a file into GitHub repository with fresh SHA lookup and automatic retry on 409 Conflict.
