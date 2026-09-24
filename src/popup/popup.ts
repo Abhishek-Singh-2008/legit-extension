@@ -12,14 +12,6 @@ import type { ExtensionSettings, SyncHistoryRecord, SyncStats } from "@/types/se
 import type { LeetCodeProblem } from "@/types/leetcode";
 import type { ConnectionStatus } from "@/storage/storage";
 
-import {
-  loadSettings,
-  loadConnectionStatus,
-  loadCurrentProblem,
-  loadSyncHistory,
-  loadSyncStats,
-} from "@/storage/storage";
-
 // ── DOM Helpers ───────────────────────────────────────────────────────────────
 
 function $<T extends Element>(selector: string): T | null {
@@ -46,46 +38,76 @@ function initVersion(): void {
 
 async function loadAndRender(): Promise<void> {
   try {
-    // Read directly from storage to eliminate service worker cold-start / IPC latency
-    const [connStatus, settings, storedProblem, history, stats, activeTabs] = await Promise.all([
-      loadConnectionStatus().catch(() => ({ connected: false })),
-      loadSettings().catch(() => ({})),
-      loadCurrentProblem().catch(() => null),
-      loadSyncHistory(5).catch(() => []),
-      loadSyncStats().catch(() => ({
-        total: 0,
-        success: 0,
-        failed: 0,
-        duplicate: 0,
-        skipped: 0,
-        authFailed: 0,
-        byDifficulty: { Easy: 0, Medium: 0, Hard: 0 },
-        byLanguage: {},
-      })),
-      chrome.tabs.query({ active: true, currentWindow: true }).catch(() => []),
+    // Single batch read from chrome.storage.local to render instantly (<50ms)
+    const data = await chrome.storage.local.get([
+      "extensionSettings",
+      "currentProblem",
+      "syncHistory",
     ]);
 
-    renderConnection(connStatus as ConnectionStatus);
-    renderSettings(settings as Partial<ExtensionSettings>);
+    const settings = (data.extensionSettings as Partial<ExtensionSettings>) ?? {};
+    const isConnected = Boolean(settings.githubToken && settings.githubToken.trim().length > 0);
+    const connStatus: ConnectionStatus = {
+      connected: isConnected,
+      username: settings.githubUsername,
+      avatarUrl: settings.githubAvatarUrl,
+    };
 
-    let currentProblem: LeetCodeProblem | null = storedProblem;
+    const storedProblem = (data.currentProblem as LeetCodeProblem | null) ?? null;
+    const historyList = (data.syncHistory as SyncHistoryRecord[] | undefined) ?? [];
+    const topHistory = historyList.slice(0, 5);
 
-    const activeTab = activeTabs?.[0];
-    if (activeTab?.url) {
-      const slug = slugFromUrl(activeTab.url);
-      if (slug) {
-        currentProblem = {
-          title: slugToTitle(slug),
-          slug,
-          difficulty: currentProblem?.slug === slug ? currentProblem.difficulty : "Easy",
-          url: `https://leetcode.com/problems/${slug}/`,
-        };
+    // Compute stats directly from history without additional queries
+    const stats: SyncStats = {
+      total: historyList.length,
+      success: 0,
+      failed: 0,
+      duplicate: 0,
+      skipped: 0,
+      authFailed: 0,
+      byDifficulty: { Easy: 0, Medium: 0, Hard: 0 },
+      byLanguage: {},
+      lastSyncTimestamp: historyList[0]?.timestamp,
+    };
+
+    for (const rec of historyList) {
+      if (rec.status === "success") stats.success++;
+      else if (rec.status === "failed") stats.failed++;
+      else if (rec.status === "duplicate") stats.duplicate++;
+      else if (rec.status === "skipped") stats.skipped++;
+      else if (rec.status === "auth") stats.authFailed++;
+
+      if (rec.difficulty && stats.byDifficulty[rec.difficulty] !== undefined) {
+        stats.byDifficulty[rec.difficulty]++;
+      }
+      if (rec.language) {
+        stats.byLanguage[rec.language] = (stats.byLanguage[rec.language] ?? 0) + 1;
       }
     }
 
-    renderProblem(currentProblem);
-    renderStats(stats as SyncStats);
-    renderHistory(history as SyncHistoryRecord[]);
+    // Instant render from batch storage
+    renderConnection(connStatus);
+    renderSettings(settings);
+    renderProblem(storedProblem);
+    renderStats(stats);
+    renderHistory(topHistory);
+
+    // Non-blocking background active tab check
+    chrome.tabs.query({ active: true, currentWindow: true }).then((tabs) => {
+      const activeTab = tabs?.[0];
+      if (activeTab?.url) {
+        const slug = slugFromUrl(activeTab.url);
+        if (slug) {
+          const tabProblem: LeetCodeProblem = {
+            title: slugToTitle(slug),
+            slug,
+            difficulty: storedProblem?.slug === slug ? storedProblem.difficulty : "Easy",
+            url: `https://leetcode.com/problems/${slug}/`,
+          };
+          renderProblem(tabProblem);
+        }
+      }
+    }).catch(() => {});
   } catch (err) {
     logger.error("Failed to load popup data:", err);
   }

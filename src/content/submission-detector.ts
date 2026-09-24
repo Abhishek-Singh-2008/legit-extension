@@ -53,6 +53,8 @@ export function watchSubmissionResult(
   let submitTimestamp = 0;
   let hasReportedForCurrentSubmit = false;
   let lastProcessedKey = "";
+  let preSubmitVerdictKey = "";
+  let sawJudgingState = false;
 
   // 1. Submit Button Click Listener & Keyboard Listener
   const handleClick = (e: MouseEvent): void => {
@@ -90,10 +92,13 @@ export function watchSubmissionResult(
       text.includes("submit")
     ) {
       logger.info("[SubmissionDetector] Submit action detected!");
+      // Capture any stale verdict currently in DOM to ignore it
+      const currentVerdict = findVerdictInDOM();
+      preSubmitVerdictKey = currentVerdict ? `${currentVerdict.status}:${currentVerdict.identifier}` : "";
       isSubmitting = true;
       submitTimestamp = Date.now();
       hasReportedForCurrentSubmit = false;
-      lastProcessedKey = ""; // Reset to allow fresh detection for new submission
+      sawJudgingState = false;
     }
   };
 
@@ -101,10 +106,12 @@ export function watchSubmissionResult(
     // Detect Ctrl+Enter or Cmd+Enter for code submission (Ctrl+' is Run Code, ignore)
     if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
       logger.info("[SubmissionDetector] Submit keyboard shortcut detected (Ctrl/Cmd + Enter)");
+      const currentVerdict = findVerdictInDOM();
+      preSubmitVerdictKey = currentVerdict ? `${currentVerdict.status}:${currentVerdict.identifier}` : "";
       isSubmitting = true;
       submitTimestamp = Date.now();
       hasReportedForCurrentSubmit = false;
-      lastProcessedKey = ""; // Reset to allow fresh detection for new submission
+      sawJudgingState = false;
     }
   };
 
@@ -114,6 +121,16 @@ export function watchSubmissionResult(
   // 2. MutationObserver for Result DOM Area
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
+  const isJudgingInDOM = (): boolean => {
+    const text = document.body.textContent?.toLowerCase() ?? "";
+    const hasJudgingText =
+      text.includes("judging") ||
+      text.includes("pending") ||
+      text.includes("running testcases") ||
+      Boolean(document.querySelector('[data-e2e-locator*="loading"], [class*="loading-"], [class*="spinner"]'));
+    return hasJudgingText;
+  };
+
   const checkResultDOM = (): void => {
     // Only evaluate if user is actively submitting OR on a direct submission permalink URL
     const isSubmissionPage = location.pathname.includes("/submissions/");
@@ -121,10 +138,15 @@ export function watchSubmissionResult(
       return;
     }
 
-    // If submit happened more than 60 seconds ago without a verdict, expire it
-    if (isSubmitting && Date.now() - submitTimestamp > 60000) {
+    // If submit happened more than 90 seconds ago without a verdict, expire it
+    if (isSubmitting && Date.now() - submitTimestamp > 90000) {
       isSubmitting = false;
       return;
+    }
+
+    // Check if intermediate judging/pending state is observed
+    if (isSubmitting && isJudgingInDOM()) {
+      sawJudgingState = true;
     }
 
     const verdict = findVerdictInDOM();
@@ -132,13 +154,21 @@ export function watchSubmissionResult(
 
     const submissionKey = `${verdict.status}:${verdict.identifier}`;
 
+    // Suppress stale pre-submit verdict before LeetCode finishes judging
+    if (isSubmitting && !sawJudgingState) {
+      if (submissionKey === preSubmitVerdictKey && Date.now() - submitTimestamp < 1500) {
+        logger.debug("[SubmissionDetector] Stale pre-submit verdict detected — waiting for fresh result.");
+        return;
+      }
+    }
+
     // Suppress multiple callbacks for the same active submit event
     if (hasReportedForCurrentSubmit && !isSubmitting) {
       return;
     }
 
     // Prevent duplicate processing of the same result
-    if (!isSubmitting && submissionKey === lastProcessedKey) {
+    if (submissionKey === lastProcessedKey && !isSubmitting) {
       return;
     }
 
@@ -146,7 +176,7 @@ export function watchSubmissionResult(
     isSubmitting = false;
     hasReportedForCurrentSubmit = true;
 
-    logger.info(`[SubmissionDetector] Submission verdict detected: ${verdict.status} (${submissionKey})`);
+    logger.info(`[SubmissionDetector] Fresh submission verdict detected: ${verdict.status} (${submissionKey})`);
 
     if (verdict.status === "Accepted") {
       callbacks.onAccepted("Accepted");
@@ -157,7 +187,7 @@ export function watchSubmissionResult(
 
   const observer = new MutationObserver(() => {
     if (debounceTimer !== null) clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(checkResultDOM, 300);
+    debounceTimer = setTimeout(checkResultDOM, 250);
   });
 
   observer.observe(document.body, {
