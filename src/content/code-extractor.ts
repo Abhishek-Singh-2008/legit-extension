@@ -102,106 +102,55 @@ export class MonacoCodeExtractor implements CodeExtractor {
   }
 
   extractCode(): string | null {
-    const candidates: string[] = [];
+    // 1. Primary Strategy: Try window.monaco model directly from page memory
+    // This gives 100% pristine code with exact formatting, indents and comments
+    const blobCode = extractCodeViaBlobScript();
+    if (blobCode && blobCode.trim().length > 0) {
+      logger.info("[CodeExtractor] Successfully extracted code from Monaco memory model.");
+      return blobCode;
+    }
 
-    // 1. Scan ALL .view-lines and .lines-content containers in DOM
+    // 2. Secondary Strategy: Extract cleanly from rendered lines (.view-line)
     const lineContainers = document.querySelectorAll(
       ".view-lines, .lines-content, [class*='view-lines']"
     );
     for (const container of lineContainers) {
-      const code = extractFromContainer(container);
-      if (code && code.trim().length > 0) {
-        candidates.push(code.trim());
+      const lineEls = container.querySelectorAll(".view-line, [class*='view-line']");
+      if (lineEls.length > 0) {
+        const lines = Array.from(lineEls).map((el) =>
+          (el.textContent ?? "").replace(/\u00a0/g, " ")
+        );
+        const code = lines.join("\n");
+        if (code.trim().length > 0) {
+          logger.info("[CodeExtractor] Extracted code from DOM .view-line elements.");
+          return code;
+        }
       }
     }
 
-    // 2. Scan CodeMirror 6 or custom editor lines
-    const cmLines = document.querySelectorAll(".cm-content, .cm-line");
+    // 3. Strategy: CodeMirror 6 (.cm-line)
+    const cmLines = document.querySelectorAll(".cm-content .cm-line, .cm-line");
     if (cmLines.length > 0) {
       const cmText = Array.from(cmLines)
-        .map((el) => el.textContent ?? "")
+        .map((el) => (el.textContent ?? "").replace(/\u00a0/g, " "))
         .join("\n");
       if (cmText.trim().length > 0) {
-        candidates.push(cmText.trim());
+        logger.info("[CodeExtractor] Extracted code from CodeMirror elements.");
+        return cmText;
       }
     }
 
-    // 3. Scan <pre> and <code> blocks (often used on /submissions/<id>/ pages)
-    const codeBlocks = document.querySelectorAll(
-      "pre code, pre, [class*='submission-code'], [class*='code-area'], [class*='syntax-highlighter'], [class*='code-container']"
-    );
+    // 4. Strategy: Dedicated submission code container (<pre><code>) on /submissions/ pages
+    const codeBlocks = document.querySelectorAll("pre code, [class*='submission-code'] code");
     for (const block of codeBlocks) {
-      const text = (block as HTMLElement).innerText ?? block.textContent;
+      const text = block.textContent?.replace(/\u00a0/g, " ");
       if (text && text.trim().length > 0) {
-        const cleaned = text.replace(/\u00a0/g, " ").trim();
-        if (cleaned.length > 0) candidates.push(cleaned);
+        return text;
       }
     }
 
-    // 4. Scan ALL .monaco-editor and editor containers on screen
-    const editors = document.querySelectorAll(
-      ".monaco-editor, [class*='editor-container'], [class*='code-editor']"
-    );
-    for (const editor of editors) {
-      const text = (editor as HTMLElement).innerText ?? editor.textContent;
-      if (text && text.trim().length > 0) {
-        const cleaned = text.replace(/\u00a0/g, " ").trim();
-        if (cleaned.length > 0) candidates.push(cleaned);
-      }
-    }
-
-    // 5. Scan textareas
-    const textareas = document.querySelectorAll<HTMLTextAreaElement>(
-      "textarea.inputarea, textarea"
-    );
-    for (const ta of textareas) {
-      if (ta.value && ta.value.trim().length > 0) {
-        candidates.push(ta.value.trim());
-      }
-    }
-
-    // 6. Try window.monaco via page script if available
-    const blobCode = extractCodeViaBlobScript();
-    if (blobCode && blobCode.trim().length > 0) {
-      candidates.push(blobCode.trim());
-    }
-
-    if (candidates.length === 0) return null;
-
-    // Sort candidates by length descending and pick the longest string
-    candidates.sort((a, b) => b.length - a.length);
-
-    // Return the longest candidate string
-    return candidates[0] ?? null;
+    return null;
   }
-}
-
-function extractFromContainer(container: Element): string | null {
-  // Method 1: Query individual line elements (.view-line)
-  const lineEls = container.querySelectorAll(
-    ".view-line, [class*='view-line'], :scope > div"
-  );
-  if (lineEls.length > 0) {
-    const lines = Array.from(lineEls).map((el) =>
-      (el.textContent ?? "").replace(/\u00a0/g, " ")
-    );
-    const code = lines.join("\n");
-    if (code.trim().length > 0) return code;
-  }
-
-  // Method 2: Direct innerText of container
-  const innerText = (container as HTMLElement).innerText;
-  if (innerText && innerText.trim().length > 0) {
-    return innerText.replace(/\u00a0/g, " ");
-  }
-
-  // Method 3: Direct textContent fallback
-  const textContent = container.textContent;
-  if (textContent && textContent.trim().length > 0) {
-    return textContent.replace(/\u00a0/g, " ");
-  }
-
-  return null;
 }
 
 /**

@@ -38,54 +38,81 @@ function initVersion(): void {
 
 async function loadAndRender(): Promise<void> {
   try {
-    const [connRes, settingsRes, problemRes, historyRes, statsRes] = await Promise.all([
-      chrome.runtime.sendMessage({ type: "GET_CONNECTION_STATUS" }),
-      chrome.runtime.sendMessage({ type: "GET_SETTINGS" }),
-      chrome.runtime.sendMessage({ type: "GET_CURRENT_PROBLEM" }),
-      chrome.runtime.sendMessage({ type: "GET_SYNC_HISTORY", limit: 5 }),
-      chrome.runtime.sendMessage({ type: "GET_SYNC_STATS" }),
+    // Single batch read from chrome.storage.local to render instantly (<50ms)
+    const data = await chrome.storage.local.get([
+      "extensionSettings",
+      "currentProblem",
+      "syncHistory",
     ]);
 
-    if (connRes?.ok) {
-      renderConnection(connRes.data as ConnectionStatus);
-    }
-    if (settingsRes?.ok) {
-      renderSettings(settingsRes.data as Partial<ExtensionSettings>);
+    const settings = (data.extensionSettings as Partial<ExtensionSettings>) ?? {};
+    const isConnected = Boolean(settings.githubToken && settings.githubToken.trim().length > 0);
+    const connStatus: ConnectionStatus = {
+      connected: isConnected,
+      username: settings.githubUsername,
+      avatarUrl: settings.githubAvatarUrl,
+    };
+
+    const storedProblem = (data.currentProblem as LeetCodeProblem | null) ?? null;
+    const historyList = (data.syncHistory as SyncHistoryRecord[] | undefined) ?? [];
+    const topHistory = historyList.slice(0, 5);
+
+    // Compute stats directly from history without additional queries
+    const stats: SyncStats = {
+      total: historyList.length,
+      success: 0,
+      failed: 0,
+      duplicate: 0,
+      skipped: 0,
+      authFailed: 0,
+      byDifficulty: { Easy: 0, Medium: 0, Hard: 0 },
+      byLanguage: {},
+      lastSyncTimestamp: historyList[0]?.timestamp,
+    };
+
+    for (const rec of historyList) {
+      if (rec.status === "success") stats.success++;
+      else if (rec.status === "failed") stats.failed++;
+      else if (rec.status === "duplicate") stats.duplicate++;
+      else if (rec.status === "skipped") stats.skipped++;
+      else if (rec.status === "auth") stats.authFailed++;
+
+      if (rec.difficulty && stats.byDifficulty[rec.difficulty] !== undefined) {
+        stats.byDifficulty[rec.difficulty]++;
+      }
+      if (rec.language) {
+        stats.byLanguage[rec.language] = (stats.byLanguage[rec.language] ?? 0) + 1;
+      }
     }
 
-    let currentProblem: LeetCodeProblem | null = problemRes?.ok
-      ? (problemRes.data as LeetCodeProblem)
-      : null;
+    // Instant render from batch storage
+    renderConnection(connStatus);
+    renderSettings(settings);
+    renderProblem(storedProblem);
+    renderStats(stats);
+    renderHistory(topHistory);
 
-    try {
-      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    // Non-blocking background active tab check
+    chrome.tabs.query({ active: true, currentWindow: true }).then((tabs) => {
+      const activeTab = tabs?.[0];
       if (activeTab?.url) {
         const slug = slugFromUrl(activeTab.url);
         if (slug) {
-          currentProblem = {
+          const tabProblem: LeetCodeProblem = {
             title: slugToTitle(slug),
             slug,
-            difficulty: currentProblem?.slug === slug ? currentProblem.difficulty : "Easy",
+            difficulty: storedProblem?.slug === slug ? storedProblem.difficulty : "Easy",
             url: `https://leetcode.com/problems/${slug}/`,
           };
+          renderProblem(tabProblem);
         }
       }
-    } catch {
-      // Fallback to storage
-    }
-
-    renderProblem(currentProblem);
-
-    if (statsRes?.ok) {
-      renderStats(statsRes.data as SyncStats);
-    }
-    if (historyRes?.ok) {
-      renderHistory(historyRes.data as SyncHistoryRecord[]);
-    }
+    }).catch(() => {});
   } catch (err) {
     logger.error("Failed to load popup data:", err);
   }
 }
+
 
 // ── Renderers ─────────────────────────────────────────────────────────────────
 

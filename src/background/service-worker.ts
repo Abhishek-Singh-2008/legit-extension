@@ -483,7 +483,7 @@ async function handleMessage(
       }
 
       // ── 5. Deduplication ────────────────────────────────────────────────────
-      const hash = await sha256(`${submission.slug}:${submission.language}:${submission.code}`);
+      const hash = await sha256(`${submission.slug}:${submission.language}:${submission.code.trim()}`);
 
       // Suppress concurrent in-flight submissions of identical payload
       if (inFlightPushes.has(hash)) {
@@ -506,32 +506,12 @@ async function handleMessage(
           status: "duplicate",
         });
 
-        await addSyncHistoryRecord({
-          title: submission.title,
-          slug: submission.slug,
-          difficulty: submission.difficulty as "Easy" | "Medium" | "Hard",
-          language: submission.language,
-          repository: repoStr(settings),
-          branch: settings.githubBranch,
-          timestamp: new Date().toISOString(),
-          status: "duplicate",
-        });
-
         return { ok: true };
       }
 
       // ── 6. Push to GitHub ───────────────────────────────────────────────────
       logger.info(`[LCSync] Starting GitHub sync for ${submission.slug}...`);
       inFlightPushes.add(hash);
-
-      // Immediately register sync start so popup & dashboard update with 0ms delay
-      const startIso = new Date().toISOString();
-      await updateLastSync({
-        title: submission.title,
-        slug: submission.slug,
-        timestamp: startIso,
-        status: "success",
-      });
 
       let pushResult;
       try {
@@ -587,6 +567,23 @@ async function handleMessage(
         return { ok: false, error: msg };
       } finally {
         inFlightPushes.delete(hash);
+      }
+
+      // If push identified this as an exact duplicate in repository
+      if (pushResult.isDuplicate) {
+        await recordSubmissionHash(hash);
+        logger.info(`[Push] Repository already contains identical solution file — skipping push.`);
+        showNotification(
+          "Already synced",
+          `Already synced — ${submission.title}`
+        );
+        await updateLastSync({
+          title: submission.title,
+          slug: submission.slug,
+          timestamp: new Date().toISOString(),
+          status: "duplicate",
+        });
+        return { ok: true };
       }
 
       // ── 7. Record deduplication hash ────────────────────────────────────────
