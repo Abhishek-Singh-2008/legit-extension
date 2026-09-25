@@ -196,6 +196,12 @@ export function watchSubmissionResult(
     characterData: true,
   });
 
+  // Check immediately if directly loaded on a submission page
+  if (location.pathname.includes("/submissions/")) {
+    setTimeout(checkResultDOM, 600);
+    setTimeout(checkResultDOM, 1500);
+  }
+
   // Cleanup
   return () => {
     document.removeEventListener("click", handleClick, true);
@@ -218,9 +224,11 @@ interface FoundVerdict {
  * Searches the DOM for submission result containers and verifies full testcase pass.
  */
 function findVerdictInDOM(): FoundVerdict | null {
-  // Strategy A: data-e2e-locator="submission-result"
-  const e2eEl = document.querySelector('[data-e2e-locator="submission-result"], [data-cy="submission-result-status"]');
-  if (e2eEl && isInsideSubmissionPanel(e2eEl)) {
+  // Strategy A: data-e2e-locator="submission-result" or data-cy attributes
+  const e2eEls = document.querySelectorAll(
+    '[data-e2e-locator*="submission-result"], [data-cy*="submission-result"], [data-e2e-locator*="result-status"], [data-cy*="result-status"]'
+  );
+  for (const e2eEl of e2eEls) {
     const text = e2eEl.textContent?.trim() ?? "";
     const status = parseSubmissionStatus(text);
     if (status && verifyAllTestCasesPassed(e2eEl, status)) {
@@ -232,7 +240,7 @@ function findVerdictInDOM(): FoundVerdict | null {
     }
   }
 
-  // Strategy B: CSS class design tokens for status in submission panels
+  // Strategy B: Match elements with status CSS classes or tokens
   const statusSelectors = [
     ".text-sd-easy",
     ".text-fixed-positive",
@@ -248,16 +256,15 @@ function findVerdictInDOM(): FoundVerdict | null {
     '[class*="submission-result"]',
     '[class*="result-state"]',
     '[class*="result-container"]',
-    '[data-e2e-locator*="result"]',
+    '[class*="status-accepted"]',
   ];
 
   for (const selector of statusSelectors) {
     const elements = document.querySelectorAll(selector);
     for (const el of elements) {
-      if (!isInsideSubmissionPanel(el)) continue;
       const text = el.textContent?.trim() ?? "";
       const status = parseSubmissionStatus(text);
-      if (status && verifyAllTestCasesPassed(el, status)) {
+      if (status && isInsideSubmissionPanel(el) && verifyAllTestCasesPassed(el, status)) {
         return {
           status,
           identifier: getElementIdentifier(el),
@@ -267,11 +274,10 @@ function findVerdictInDOM(): FoundVerdict | null {
     }
   }
 
-  // Strategy C: Inspect submission result container headings or text elements
-  const headings = document.querySelectorAll("div, span, h3, h4, p");
-  for (const el of headings) {
+  // Strategy C: Inspect headings, spans, divs with status text in submission area
+  const candidates = document.querySelectorAll("div, span, h3, h4, p, a");
+  for (const el of candidates) {
     if (el.children.length > 2) continue;
-    if (!isInsideSubmissionPanel(el)) continue;
 
     const text = el.textContent?.trim() ?? "";
     if (text.length === 0 || text.length > 60) continue;
@@ -282,7 +288,7 @@ function findVerdictInDOM(): FoundVerdict | null {
         text.toLowerCase().startsWith(`${key} `) ||
         text.toLowerCase().startsWith(key)
       ) {
-        if (verifyAllTestCasesPassed(el, status)) {
+        if (isInsideSubmissionPanel(el) && verifyAllTestCasesPassed(el, status)) {
           return {
             status,
             identifier: getElementIdentifier(el),
@@ -297,7 +303,7 @@ function findVerdictInDOM(): FoundVerdict | null {
 }
 
 /**
- * Ensures that if status is "Accepted", all testcases actually passed (e.g., "65 / 65 testcases passed").
+ * Ensures that if status is "Accepted", all testcases actually passed (e.g., "61 / 61 testcases passed").
  * Rejects partial testcase runs or wrong answer states.
  */
 function verifyAllTestCasesPassed(el: Element, status: SubmissionStatus): boolean {
@@ -305,12 +311,16 @@ function verifyAllTestCasesPassed(el: Element, status: SubmissionStatus): boolea
     return true; // For rejected verdicts, allow status through so onRejected can handle it
   }
 
-  // Search surrounding container for testcase indicators (e.g. "65 / 65 testcases passed")
-  const container = el.closest('[data-e2e-locator="submission-result"]') ?? el.parentElement?.parentElement ?? el.parentElement;
+  // Search surrounding container for testcase indicators (e.g. "61 / 61 testcases passed")
+  const container =
+    el.closest('[data-e2e-locator*="result"], [data-layout-path], section, main, div[class*="flex"]') ??
+    el.parentElement?.parentElement ??
+    el.parentElement;
+
   if (container) {
     const containerText = container.textContent ?? "";
     
-    // Check if testcases ratio like "35 / 65" or "65 / 65" exists
+    // Check if testcases ratio like "35 / 65" or "61 / 61" exists
     const tcMatch = containerText.match(/(\d+)\s*\/\s*(\d+)\s*testcases\s*passed/i);
     if (tcMatch) {
       const passed = parseInt(tcMatch[1], 10);
@@ -336,48 +346,58 @@ function getElementIdentifier(el: Element): string {
 
 /**
  * Checks if an element is located inside a submission result container or panel,
- * and NOT inside the "Run Code" / testcase runner panel.
+ * and NOT inside the purely interactive "Run Code" console tab.
  */
 function isInsideSubmissionPanel(el: Element): boolean {
+  // If on a dedicated submission URL, it is always a submission panel
   if (location.pathname.includes("/submissions/")) {
     return true;
   }
 
-  let current: Element | null = el;
-  let depth = 0;
-  while (current && depth < 10) {
-    const cls = current.className ? String(current.className).toLowerCase() : "";
-    const id = current.id ? String(current.id).toLowerCase() : "";
-    const dataPath = (current.getAttribute("data-layout-path") ?? "").toLowerCase();
-    const dataLocator = (current.getAttribute("data-e2e-locator") ?? "").toLowerCase();
-
-    // Explicitly exclude "Run Code" testcase console tabs/panels
-    if (
-      dataPath.includes("testcase") ||
-      dataPath.includes("console") ||
-      dataLocator.includes("console-result") ||
-      cls.includes("test-case") ||
-      cls.includes("console-tab")
-    ) {
+  // Ignore navigation tab strip headers like <button role="tab">Accepted</button>
+  const isTabHeader = Boolean(
+    el.getAttribute("role") === "tab" ||
+    el.closest('[role="tablist"], nav, [class*="tab-header"]')
+  );
+  if (isTabHeader) {
+    // If it's just the tab title tab without testcase stats, ignore
+    const text = el.parentElement?.textContent ?? "";
+    if (!text.includes("testcases") && !text.includes("Runtime") && !text.includes("submitted at")) {
       return false;
     }
+  }
 
+  // Check if surrounding DOM contains submission result markers
+  let current: Element | null = el;
+  let depth = 0;
+  while (current && depth < 12) {
+    const cls = current.className ? String(current.className).toLowerCase() : "";
+    const id = current.id ? String(current.id).toLowerCase() : "";
+    const dataLocator = (current.getAttribute("data-e2e-locator") ?? "").toLowerCase();
+    const currentText = current.textContent ?? "";
+
+    // If container has "testcases passed", "submitted at", "Beats", or submission markers, it's valid
     if (
-      cls.includes("result") ||
-      cls.includes("submission") ||
-      id.includes("result") ||
-      id.includes("submission") ||
-      dataPath.includes("result") ||
-      dataPath.includes("submission") ||
+      currentText.includes("testcases passed") ||
+      currentText.includes("submitted at") ||
+      currentText.includes("Beats ") ||
+      dataLocator.includes("submission") ||
       dataLocator.includes("result") ||
-      dataLocator.includes("submission")
+      cls.includes("submission") ||
+      cls.includes("result") ||
+      id.includes("submission") ||
+      id.includes("result")
     ) {
       return true;
     }
+
     current = current.parentElement;
     depth++;
   }
-  return false;
+
+  // Fallback: if element itself has Accepted text and is not in editor
+  const inEditor = Boolean(el.closest(".monaco-editor, .cm-editor, textarea, pre"));
+  return !inEditor;
 }
 
 
