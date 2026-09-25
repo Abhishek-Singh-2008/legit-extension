@@ -11,7 +11,7 @@ import { slugFromUrl } from "@/utils/slugify";
 import { getCurrentProblem } from "@/content/problem-detector";
 import { watchSubmissionResult } from "@/content/submission-detector";
 import { fetchAcceptedCode, fetchQuestionDifficulty } from "@/content/leetcode-api";
-import { MonacoCodeExtractor, getCurrentLanguage } from "@/content/code-extractor";
+import { MonacoCodeExtractor, getCurrentLanguage, extractCodeSafely } from "@/content/code-extractor";
 import type { LeetCodeProblem, LeetCodeSubmission, SubmissionStatus } from "@/types/leetcode";
 
 logger.info("LeetCode GitHub Sync content script loaded.");
@@ -110,7 +110,7 @@ function sendProblemDetected(problem: LeetCodeProblem | null): void {
 let isHandlingAccepted = false;
 
 watchSubmissionResult({
-  onAccepted: async (status: SubmissionStatus) => {
+  onAccepted: async (status: SubmissionStatus, metadata?: { staleSubmissionId?: string }) => {
     if (isHandlingAccepted) {
       logger.debug("[Content] Already processing an Accepted submission — skipping duplicate callback.");
       return;
@@ -132,25 +132,49 @@ watchSubmissionResult({
 
       logger.info(`[LCSync] Accepted: ${problem.title} (${problem.difficulty})`);
       
-      // 1. Primary Strategy: Fetch pristine submitted code from LeetCode's official GraphQL API
-      // This is the actual code stored and executed on LeetCode servers (0% DOM distortion)
-      const urlSubmissionId = location.pathname.match(/\/submissions\/(\d+)/)?.[1];
-      logger.info(`[LCSync] Fetching code from LeetCode GraphQL API (submissionId: ${urlSubmissionId ?? "latest"})...`);
-      let code: string | null = null;
-      let language = getCurrentLanguage();
+      // Extract active editor code & language as primary ground truth from page
+      const editorData = extractCodeSafely();
+      let code: string | null = editorData.code;
+      let language = editorData.language;
+
+      // Check URL for a submission ID (ignore if it's the stale ID from before clicking Submit)
+      const currentUrlSubId = location.pathname.match(/\/submissions\/(\d+)/)?.[1];
+      const freshUrlSubmissionId =
+        currentUrlSubId && currentUrlSubId !== metadata?.staleSubmissionId
+          ? currentUrlSubId
+          : undefined;
+
+      logger.info(
+        `[LCSync] Fetching code from LeetCode GraphQL API (submissionId: ${
+          freshUrlSubmissionId ?? "latest"
+        }, staleId: ${metadata?.staleSubmissionId ?? "none"})...`
+      );
 
       try {
-        const result = await fetchAcceptedCode(problem.slug, urlSubmissionId);
+        const result = await fetchAcceptedCode(problem.slug, freshUrlSubmissionId, metadata?.staleSubmissionId);
         if (result?.code && result.code.trim().length > 0) {
-          code = result.code;
-          if (result.language) language = result.language;
-          logger.info(`[LCSync] Pristine code fetched via LeetCode GraphQL API (${code.length} chars, ${language})`);
+          // If editor has code and detected a specific language (e.g. Java) but GraphQL returned a different language (e.g. stale Python),
+          // prioritize editor code to prevent stale overwrite
+          if (
+            editorData.code &&
+            editorData.language &&
+            result.language &&
+            editorData.language.toLowerCase() !== result.language.toLowerCase()
+          ) {
+            logger.warn(
+              `[LCSync] GraphQL returned language ${result.language} but editor has ${editorData.language}. Using editor code to prevent stale overwrite.`
+            );
+          } else {
+            code = result.code;
+            if (result.language) language = result.language;
+            logger.info(`[LCSync] Pristine code fetched via LeetCode GraphQL API (${code.length} chars, ${language})`);
+          }
         }
       } catch (gqlErr) {
         logger.warn("[LCSync] GraphQL code fetch failed, falling back to editor extractor:", gqlErr);
       }
 
-      // 2. Fallback: Monaco editor / DOM extraction if GraphQL was unavailable
+      // Fallback: Monaco editor / DOM extraction if GraphQL was unavailable
       if (!code || code.trim().length === 0) {
         const monacoExtractor = new MonacoCodeExtractor();
         if (monacoExtractor.canExtract()) {

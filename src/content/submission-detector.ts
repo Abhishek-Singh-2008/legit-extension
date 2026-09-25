@@ -7,7 +7,7 @@ import { logger } from "@/utils/logger";
 import type { SubmissionStatus } from "@/types/leetcode";
 
 export interface SubmissionDetectorCallbacks {
-  onAccepted: (status: SubmissionStatus) => void;
+  onAccepted: (status: SubmissionStatus, metadata?: { staleSubmissionId?: string }) => void;
   onRejected: (status: SubmissionStatus) => void;
 }
 
@@ -54,6 +54,7 @@ export function watchSubmissionResult(
   let hasReportedForCurrentSubmit = false;
   let lastProcessedKey = "";
   let preSubmitVerdictKey = "";
+  let preSubmitSubmissionId: string | undefined = undefined;
   let sawJudgingState = false;
 
   // 1. Submit Button Click Listener & Keyboard Listener
@@ -92,9 +93,11 @@ export function watchSubmissionResult(
       text.includes("submit")
     ) {
       logger.info("[SubmissionDetector] Submit action detected!");
-      // Capture any stale verdict currently in DOM to ignore it
+      // Capture any stale verdict or submission ID currently in DOM/URL to ignore it
       const currentVerdict = findVerdictInDOM();
       preSubmitVerdictKey = currentVerdict ? `${currentVerdict.status}:${currentVerdict.identifier}` : "";
+      const urlMatch = location.pathname.match(/\/submissions\/(\d+)/);
+      preSubmitSubmissionId = urlMatch ? urlMatch[1] : undefined;
       isSubmitting = true;
       submitTimestamp = Date.now();
       hasReportedForCurrentSubmit = false;
@@ -108,6 +111,8 @@ export function watchSubmissionResult(
       logger.info("[SubmissionDetector] Submit keyboard shortcut detected (Ctrl/Cmd + Enter)");
       const currentVerdict = findVerdictInDOM();
       preSubmitVerdictKey = currentVerdict ? `${currentVerdict.status}:${currentVerdict.identifier}` : "";
+      const urlMatch = location.pathname.match(/\/submissions\/(\d+)/);
+      preSubmitSubmissionId = urlMatch ? urlMatch[1] : undefined;
       isSubmitting = true;
       submitTimestamp = Date.now();
       hasReportedForCurrentSubmit = false;
@@ -173,13 +178,14 @@ export function watchSubmissionResult(
     }
 
     lastProcessedKey = submissionKey;
+    const staleIdToSend = preSubmitSubmissionId;
     isSubmitting = false;
     hasReportedForCurrentSubmit = true;
 
     logger.info(`[SubmissionDetector] Fresh submission verdict detected: ${verdict.status} (${submissionKey})`);
 
     if (verdict.status === "Accepted") {
-      callbacks.onAccepted("Accepted");
+      callbacks.onAccepted("Accepted", { staleSubmissionId: staleIdToSend });
     } else {
       callbacks.onRejected(verdict.status);
     }
