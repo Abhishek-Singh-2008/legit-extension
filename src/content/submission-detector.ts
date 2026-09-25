@@ -55,7 +55,6 @@ export function watchSubmissionResult(
   let lastProcessedKey = "";
   let preSubmitVerdictKey = "";
   let preSubmitSubmissionId: string | undefined = undefined;
-  let sawJudgingState = false;
 
   // 1. Submit Button Click Listener & Keyboard Listener
   const handleClick = (e: MouseEvent): void => {
@@ -101,7 +100,6 @@ export function watchSubmissionResult(
       isSubmitting = true;
       submitTimestamp = Date.now();
       hasReportedForCurrentSubmit = false;
-      sawJudgingState = false;
     }
   };
 
@@ -116,7 +114,6 @@ export function watchSubmissionResult(
       isSubmitting = true;
       submitTimestamp = Date.now();
       hasReportedForCurrentSubmit = false;
-      sawJudgingState = false;
     }
   };
 
@@ -125,16 +122,6 @@ export function watchSubmissionResult(
 
   // 2. MutationObserver for Result DOM Area
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-
-  const isJudgingInDOM = (): boolean => {
-    const text = document.body.textContent?.toLowerCase() ?? "";
-    const hasJudgingText =
-      text.includes("judging") ||
-      text.includes("pending") ||
-      text.includes("running testcases") ||
-      Boolean(document.querySelector('[data-e2e-locator*="loading"], [class*="loading-"], [class*="spinner"]'));
-    return hasJudgingText;
-  };
 
   const checkResultDOM = (): void => {
     // Only evaluate if user is actively submitting OR on a direct submission permalink URL
@@ -149,20 +136,15 @@ export function watchSubmissionResult(
       return;
     }
 
-    // Check if intermediate judging/pending state is observed
-    if (isSubmitting && isJudgingInDOM()) {
-      sawJudgingState = true;
-    }
-
     const verdict = findVerdictInDOM();
     if (!verdict) return;
 
     const submissionKey = `${verdict.status}:${verdict.identifier}`;
 
-    // Suppress stale pre-submit verdict before LeetCode finishes judging
-    if (isSubmitting && !sawJudgingState) {
-      if (submissionKey === preSubmitVerdictKey && Date.now() - submitTimestamp < 1500) {
-        logger.debug("[SubmissionDetector] Stale pre-submit verdict detected — waiting for fresh result.");
+    // Suppress stale pre-submit verdict while waiting for LeetCode to finish judging
+    if (isSubmitting) {
+      if (submissionKey === preSubmitVerdictKey) {
+        logger.debug("[SubmissionDetector] Waiting for fresh submission verdict (pre-submit verdict still in DOM)...");
         return;
       }
     }
@@ -345,9 +327,15 @@ function verifyAllTestCasesPassed(el: Element, status: SubmissionStatus): boolea
  * Generate a unique fingerprint for a result element to prevent duplicate triggers.
  */
 function getElementIdentifier(el: Element): string {
-  const parentText = el.parentElement?.textContent?.slice(0, 100).trim() ?? "";
+  const container =
+    el.closest('[data-e2e-locator*="result"], [data-layout-path], section, main, div[class*="flex"]') ??
+    el.parentElement?.parentElement ??
+    el.parentElement;
+
+  const containerText = container?.textContent?.slice(0, 250).trim() ?? "";
   const submissionUrlId = location.pathname.match(/\/submissions\/(\d+)/)?.[1] ?? "";
-  return `${submissionUrlId}:${el.textContent?.trim()}:${parentText}`;
+  const submitTimeMatch = containerText.match(/submitted\s+(?:at\s+)?([^\n\r]+)/i)?.[0] ?? "";
+  return `${submissionUrlId}:${el.textContent?.trim()}:${submitTimeMatch}:${containerText.slice(0, 80)}`;
 }
 
 /**
