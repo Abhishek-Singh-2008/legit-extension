@@ -288,7 +288,8 @@ export async function addSyncHistoryRecord(
  */
 export async function clearSyncHistory(): Promise<void> {
   await chrome.storage.local.set({ [HISTORY_KEY]: [] });
-  logger.info("[History] Sync history cleared.");
+  await saveSettings({ recentSubmissionHashes: [], lastSync: undefined });
+  logger.info("[History] Sync history and deduplication cache cleared.");
 }
 
 /**

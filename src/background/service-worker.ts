@@ -15,7 +15,6 @@ import {
   loadConnectionStatus,
   loadAuthToken,
   recordSubmissionHash,
-  isSubmissionDuplicate,
   updateLastSync,
   loadSyncHistory,
   addSyncHistoryRecord,
@@ -482,30 +481,12 @@ async function handleMessage(
         return { ok: true };
       }
 
-      // ── 5. Deduplication ────────────────────────────────────────────────────
+      // ── 5. In-flight Push Guard ─────────────────────────────────────────────
       const hash = await sha256(`${submission.slug}:${submission.language}:${submission.code.trim()}`);
 
       // Suppress concurrent in-flight submissions of identical payload
       if (inFlightPushes.has(hash)) {
         logger.info(`[Push] In-flight sync already in progress for ${submission.slug} — skipping concurrent duplicate.`);
-        return { ok: true };
-      }
-
-      const isDuplicate = await isSubmissionDuplicate(hash);
-      if (isDuplicate) {
-        logger.info(`[Push] Duplicate submission detected (${submission.slug}) — skipping.`);
-        showNotification(
-          "Already synced",
-          `Already synced — ${submission.title}`
-        );
-
-        await updateLastSync({
-          title: submission.title,
-          slug: submission.slug,
-          timestamp: new Date().toISOString(),
-          status: "duplicate",
-        });
-
         return { ok: true };
       }
 
@@ -580,6 +561,19 @@ async function handleMessage(
         await updateLastSync({
           title: submission.title,
           slug: submission.slug,
+          timestamp: new Date().toISOString(),
+          status: "duplicate",
+          commitUrl: pushResult.commitUrl,
+        });
+        await addSyncHistoryRecord({
+          title: submission.title,
+          slug: submission.slug,
+          difficulty: submission.difficulty as "Easy" | "Medium" | "Hard",
+          language: submission.language,
+          repository: repoStr(settings),
+          branch: settings.githubBranch,
+          filePath: pushResult.solutionPath,
+          commitUrl: pushResult.commitUrl,
           timestamp: new Date().toISOString(),
           status: "duplicate",
         });
