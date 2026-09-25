@@ -111,16 +111,26 @@ export class MonacoCodeExtractor implements CodeExtractor {
     }
 
     // 2. Secondary Strategy: Extract cleanly from rendered lines (.view-line)
-    const lineContainers = document.querySelectorAll(
-      ".view-lines, .lines-content, [class*='view-lines']"
-    );
-    for (const container of lineContainers) {
-      const lineEls = container.querySelectorAll(".view-line, [class*='view-line']");
+    const lineContainer = document.querySelector(".monaco-editor .view-lines, .view-lines");
+    if (lineContainer) {
+      const lineEls = lineContainer.querySelectorAll(".view-line, [class*='view-line']");
       if (lineEls.length > 0) {
-        const lines = Array.from(lineEls).map((el) =>
+        const rawLines = Array.from(lineEls).map((el) =>
           (el.textContent ?? "").replace(/\u00a0/g, " ")
         );
-        const code = lines.join("\n");
+
+        // Sanitize: Check if line 0 is a compressed duplicate of subsequent lines
+        let cleanedLines = rawLines;
+        if (
+          rawLines.length > 2 &&
+          rawLines[0].length > 40 &&
+          rawLines[1] &&
+          rawLines[0].startsWith(rawLines[1].trim())
+        ) {
+          cleanedLines = rawLines.slice(1);
+        }
+
+        const code = cleanedLines.join("\n");
         if (code.trim().length > 0) {
           logger.info("[CodeExtractor] Extracted code from DOM .view-line elements.");
           return code;

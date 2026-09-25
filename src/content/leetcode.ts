@@ -132,19 +132,30 @@ watchSubmissionResult({
 
       logger.info(`[LCSync] Accepted: ${problem.title} (${problem.difficulty})`);
       
-      // 1. Try direct Monaco editor / DOM extraction for real-time code and comments
-      const monacoExtractor = new MonacoCodeExtractor();
-      let code = monacoExtractor.canExtract() ? monacoExtractor.extractCode() : null;
+      // 1. Primary Strategy: Fetch pristine submitted code from LeetCode's official GraphQL API
+      // This is the actual code stored and executed on LeetCode servers (0% DOM distortion)
+      const urlSubmissionId = location.pathname.match(/\/submissions\/(\d+)/)?.[1];
+      logger.info(`[LCSync] Fetching code from LeetCode GraphQL API (submissionId: ${urlSubmissionId ?? "latest"})...`);
+      let code: string | null = null;
       let language = getCurrentLanguage();
 
-      // 2. Fallback to LeetCode GraphQL API if editor extraction is empty
-      if (!code || code.trim().length === 0) {
-        const urlSubmissionId = location.pathname.match(/\/submissions\/(\d+)/)?.[1];
-        logger.info(`[LCSync] Fetching code from LeetCode GraphQL API (submissionId: ${urlSubmissionId ?? "latest"})...`);
+      try {
         const result = await fetchAcceptedCode(problem.slug, urlSubmissionId);
-        if (result?.code) {
+        if (result?.code && result.code.trim().length > 0) {
           code = result.code;
-          language = result.language;
+          if (result.language) language = result.language;
+          logger.info(`[LCSync] Pristine code fetched via LeetCode GraphQL API (${code.length} chars, ${language})`);
+        }
+      } catch (gqlErr) {
+        logger.warn("[LCSync] GraphQL code fetch failed, falling back to editor extractor:", gqlErr);
+      }
+
+      // 2. Fallback: Monaco editor / DOM extraction if GraphQL was unavailable
+      if (!code || code.trim().length === 0) {
+        const monacoExtractor = new MonacoCodeExtractor();
+        if (monacoExtractor.canExtract()) {
+          code = monacoExtractor.extractCode();
+          language = getCurrentLanguage();
         }
       }
 
@@ -153,7 +164,7 @@ watchSubmissionResult({
         return;
       }
 
-      logger.info(`[LCSync] Code extracted successfully (${code.length} chars, ${language})`);
+      logger.info(`[LCSync] Final code ready for push (${code.length} chars, ${language})`);
 
       // Construct full submission payload
       const submission: LeetCodeSubmission = {
