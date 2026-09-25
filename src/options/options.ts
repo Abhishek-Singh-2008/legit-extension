@@ -41,24 +41,36 @@ function initVersion(): void {
 
 async function loadAndRender(): Promise<void> {
   try {
-    const [connResponse, settingsResponse] = await Promise.all([
+    // 1. Render Dashboard and Form INSTANTLY from storage in parallel
+    const [connResponse, settingsResponse, statsRes, historyRes] = await Promise.all([
       chrome.runtime.sendMessage({ type: "GET_CONNECTION_STATUS" }),
       chrome.runtime.sendMessage({ type: "GET_SETTINGS" }),
+      chrome.runtime.sendMessage({ type: "GET_SYNC_STATS" }),
+      chrome.runtime.sendMessage({ type: "GET_SYNC_HISTORY" }),
     ]);
 
-    if (connResponse?.ok) {
-      const status = connResponse.data as ConnectionStatus;
-      renderAccount(status);
-      if (status.connected) {
-        await loadRepos(status);
-      }
+    if (statsRes?.ok) {
+      renderStats(statsRes.data as SyncStats);
+    }
+    if (historyRes?.ok) {
+      cachedHistory = (historyRes.data as SyncHistoryRecord[]) ?? [];
+      applyAndRenderFilteredHistory();
     }
 
     if (settingsResponse?.ok) {
       populateForm(settingsResponse.data as Partial<ExtensionSettings>);
     }
 
-    await loadDashboard();
+    if (connResponse?.ok) {
+      const status = connResponse.data as ConnectionStatus;
+      renderAccount(status);
+      if (status.connected) {
+        // Run repo loading asynchronously without blocking UI render
+        loadRepos(status).catch((err) => {
+          logger.warn("Non-blocking repo fetch noticed:", err);
+        });
+      }
+    }
   } catch (err) {
     logger.error("Failed to load settings in options:", err);
   }
