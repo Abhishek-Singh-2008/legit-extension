@@ -265,6 +265,15 @@ function renderHistory(history: SyncHistoryRecord[]): void {
       ? `<a href="${escapeHtml(safeCommitUrl)}" class="history-item__link" data-commit-url="${escapeHtml(safeCommitUrl)}">View commit ↗</a>`
       : "";
 
+    // File name / version badge
+    let fileBadge = "";
+    if (item.filePath) {
+      const fileName = item.filePath.split("/").pop() ?? item.filePath;
+      const vMatch = fileName.match(/solution_(\d+)\./);
+      const vLabel = vMatch ? ` (v${vMatch[1]})` : " (v1)";
+      fileBadge = `<span class="history-item__lang" style="color: var(--color-accent-2); font-weight: 500;">${escapeHtml(fileName)}${vLabel}</span>`;
+    }
+
     html += `
       <div class="history-item">
         <span class="history-item__icon ${iconClass}">${icon}</span>
@@ -275,6 +284,7 @@ function renderHistory(history: SyncHistoryRecord[]): void {
           </div>
           <div class="history-item__sub">
             ${langBadge}
+            ${fileBadge}
             <span class="history-item__time">${when}</span>
             <span class="history-item__status-text history-item__status-text--${item.status}">${item.status}</span>
           </div>
