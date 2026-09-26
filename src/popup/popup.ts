@@ -373,6 +373,13 @@ function bindEvents(): void {
   $id("settings-btn")?.addEventListener("click", () => {
     chrome.runtime.openOptionsPage();
   });
+
+  // Live real-time storage listener (updates UI immediately when sync finishes in background)
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === "local" && (changes.syncHistory || changes.extensionSettings || changes.currentProblem)) {
+      loadAndRender();
+    }
+  });
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────

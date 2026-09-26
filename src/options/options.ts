@@ -541,6 +541,13 @@ function bindEvents(): void {
     await chrome.storage.local.clear();
     location.reload();
   });
+
+  // Live real-time storage listener (updates dashboard immediately when sync finishes)
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === "local" && (changes.syncHistory || changes.extensionSettings)) {
+      loadDashboard();
+    }
+  });
 }
 
 // ── Auth Tabs & Device Flow ───────────────────────────────────────────────────
