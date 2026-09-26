@@ -6,7 +6,7 @@ A privacy-first, multi-user Chrome Extension that automatically synchronizes acc
 ![TypeScript](https://img.shields.io/badge/TypeScript-blue)
 ![Vite](https://img.shields.io/badge/Vite-purple)
 ![License](https://img.shields.io/badge/License-MIT-green)
-[![Chrome Web Store](https://img.shields.io/badge/Chrome_Web_Store-v1.0.2-brightgreen?logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/ehjenhfhnkojhpljcdohihpjpngfljpo)
+[![Chrome Web Store](https://img.shields.io/badge/Chrome_Web_Store-v1.0.3-brightgreen?logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/ehjenhfhnkojhpljcdohihpjpngfljpo)
 
 > 🚀 **Official Release**: **Legit - LeetCode to GitHub Sync** is publicly available on the [Chrome Web Store](https://chromewebstore.google.com/detail/ehjenhfhnkojhpljcdohihpjpngfljpo). Install it with a single click!
 
@@ -16,13 +16,15 @@ A privacy-first, multi-user Chrome Extension that automatically synchronizes acc
 
 | Area | Status |
 |---|---|
-| Core extension & real-time sync | ✅ Ready (v1.0.2) |
-| 1-Click GitHub Device Flow | ✅ Ready |
-| Fine-Grained PAT support | ✅ Ready |
+| Core extension & real-time sync | ✅ Ready (v1.0.3) |
+| Multi-Approach & Multi-Language Versioning | ✅ Ready (`solution.py`, `solution_2.py`, `solution.java`...) |
+| Multi-Solution Preserving `README.md` | ✅ Ready (Dedicated per-approach intuition & complexity) |
+| Universal Language Coverage (25+ Languages) | ✅ Ready (Python, Java, C++, Rust, Go, Pandas, SQL...) |
+| 1-Click GitHub Device Flow & Fine-Grained PAT | ✅ Ready |
 | Multi-Provider AI Complexity Analysis | ✅ Ready (Gemini, Groq, OpenAI, Anthropic, OpenRouter) |
 | LeetCode GraphQL accuracy & Monaco DOM extraction | ✅ Ready |
 | Sync history & local analytics dashboard | ✅ Ready |
-| Chrome Web Store | 🚀 v1.0.2 Ready |
+| Chrome Web Store | 🚀 v1.0.3 Ready |
 
 ---
 
@@ -111,12 +113,14 @@ algorithms/two-sum/README.md
 
 ## ✨ Key Features
 
-- **Automatic Synchronization**: Detects accepted submissions on LeetCode in real-time and pushes solution code and documentation directly to GitHub.
-- **1-Click Device Flow & PAT Authentication**: Flexible login options with zero third-party proxy servers.
-- **AI-Powered README Generation**: Automatically populates `README.md` with Time Complexity, Space Complexity, and Approach alongside problem description and stats.
-- **Multi-Provider AI**: Works with Google Gemini, Groq, OpenAI, Anthropic, OpenRouter, or custom OpenAI-compatible endpoints.
+- **Automatic Real-Time Sync**: Detects accepted submissions on LeetCode in real-time and pushes solution code directly to your GitHub repository.
+- **Multi-Approach & Multi-Language Versioning**: Solved the same problem with different algorithms or languages? Legit automatically creates versioned files (`solution.py`, `solution_2.py`, `solution.java`, `solution.cpp`) without overwriting previous work.
+- **Multi-Solution Preserving `README.md`**: Automatically aggregates all approaches and languages inside `## Solutions` in `README.md`, giving each algorithm its own dedicated Time Complexity, Space Complexity, and Intuition.
+- **Universal Language Support (25+ Languages)**: Full native support for Python, Java, C++, C, C#, JavaScript, TypeScript, Rust, Go, Kotlin, Swift, Scala, Ruby, PHP, Dart, Racket, Erlang, Elixir, Pandas, SQL (MySQL, PostgreSQL, MS SQL, Oracle), and Bash with dynamic fallback.
+- **1-Click Device Flow & PAT Authentication**: Flexible, secure login options with zero third-party proxy servers.
+- **AI-Powered Complexity Analysis**: Automatically generates Time Complexity, Space Complexity, and Approach summaries using Gemini, Groq, OpenAI, Anthropic, or OpenRouter.
 - **Accurate Difficulty & Metadata**: Fetches official difficulty (`Easy`, `Medium`, `Hard`) via GraphQL even if web DOM badges lag.
-- **Real-Time Editor Code Extraction**: Captures latest Monaco Editor changes instantly without waiting for LeetCode indexing delays.
+- **Real-Time Editor Code Extraction**: Captures live Monaco Editor memory models directly without waiting for LeetCode backend indexing delays.
 - **SHA-256 Duplicate Detection**: Prevents redundant commits when re-submitting unchanged code.
 - **Conflict Prevention & Safe Retries**: Built-in 409 Conflict auto-resolution with SHA refresh and exponential backoff retry.
 - **Customizable Folder Structure**: Organize solutions by `{slug}`, `{difficulty}/{slug}`, or `{slug}/{language}` with custom base directories.
@@ -284,8 +288,9 @@ npm run typecheck
 # 4. Build production extension (outputs to dist/)
 npm run build
 
-# 5. Package distribution ZIPs
-Compress-Archive -Path dist/* -DestinationPath legit-v1.0.2.zip -Force
+# 5. Package distribution ZIPs (Web Store ready)
+npm run package
+# Outputs: legit-chrome-webstore-v1.0.3.zip & legit-v1.0.3.zip
 ```
 
 ### Loading Unpacked Extension in Chrome (Development Mode)
