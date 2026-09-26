@@ -12,6 +12,7 @@ import { logger } from "@/utils/logger";
 import { GitHubApiClientImpl } from "@/github/github-api";
 import { getFilePaths } from "@/github/github-repository";
 import { generateReadme, formatCommitMessage } from "@/github/github-file";
+import { languageToExtension } from "@/utils/slugify";
 import { analyzeComplexity } from "@/ai/ai-client";
 import {
   ConfigurationError,
@@ -211,8 +212,24 @@ export async function pushSubmissionToGitHub(
         logger.warn(`[LCSync] AI analysis notice: ${aiResult.error}`);
       }
 
-      const readmeContent = generateReadme(submission, aiResult);
-      const readmeMessage = `docs: add README for ${submission.title}`;
+      // Fetch existing README if present to preserve multi-approach / multi-language history
+      let existingReadmeContent: string | undefined = undefined;
+      try {
+        const existingReadmeFile = await client.getFile(repo, readmePath, branch);
+        if (existingReadmeFile?.content) {
+          existingReadmeContent = decodeBase64(existingReadmeFile.content);
+        }
+      } catch (err) {
+        logger.debug("[LCSync] No existing README found, creating new one:", err);
+      }
+
+      const filename = targetPath.split("/").pop() ?? `solution.${languageToExtension(submission.language)}`;
+      const readmeContent = generateReadme(submission, aiResult, {
+        filename,
+        version: targetVersion,
+        existingContent: existingReadmeContent,
+      });
+      const readmeMessage = `docs: update README for ${submission.title} (${filename})`;
 
       // Push README with fresh SHA and conflict retry
       await safePutFile(client, repo, readmePath, readmeContent, readmeMessage, branch);
