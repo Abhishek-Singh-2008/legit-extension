@@ -40,11 +40,13 @@ export function slugToTitle(slug: string): string {
 
 /**
  * Map a LeetCode language label to a file extension.
- * Extend this map as LeetCode adds new languages.
+ * Covers all official LeetCode languages and common variants.
  */
 export const LANGUAGE_EXTENSIONS: Readonly<Record<string, string>> = {
   python: "py",
   python3: "py",
+  pythondata: "py",
+  pandas: "py",
   java: "java",
   cpp: "cpp",
   "c++": "cpp",
@@ -68,9 +70,28 @@ export const LANGUAGE_EXTENSIONS: Readonly<Record<string, string>> = {
   mysql: "sql",
   mssql: "sql",
   oraclesql: "sql",
+  oracle: "sql",
+  postgresql: "sql",
+  postgres: "sql",
+  sql: "sql",
+  bash: "sh",
+  shell: "sh",
+  sh: "sh",
+  clojure: "clj",
+  haskell: "hs",
+  lua: "lua",
+  julia: "jl",
+  nim: "nim",
+  zig: "zig",
+  ocaml: "ml",
+  r: "r",
 } as const;
 
 export function languageToExtension(language: string): string {
-  const key = language.toLowerCase().trim();
-  return LANGUAGE_EXTENSIONS[key] ?? "txt";
+  const key = language.toLowerCase().trim().replace(/[\s_-]+/g, "");
+  if (LANGUAGE_EXTENSIONS[key]) {
+    return LANGUAGE_EXTENSIONS[key];
+  }
+  const rawKey = language.toLowerCase().trim();
+  return LANGUAGE_EXTENSIONS[rawKey] ?? "txt";
 }

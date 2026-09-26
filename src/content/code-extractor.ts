@@ -18,6 +18,7 @@ const KNOWN_LANGUAGES: readonly string[] = [
   "Java",
   "Python3",
   "Python",
+  "Pandas",
   "JavaScript",
   "TypeScript",
   "C#",
@@ -33,9 +34,11 @@ const KNOWN_LANGUAGES: readonly string[] = [
   "Racket",
   "Erlang",
   "Elixir",
+  "PostgreSQL",
   "MySQL",
   "MS SQL Server",
   "Oracle",
+  "Bash",
 ];
 
 export function normalizeLanguageName(raw: string): string {
@@ -43,6 +46,7 @@ export function normalizeLanguageName(raw: string): string {
   const clean = raw.trim().toLowerCase();
   if (clean === "java") return "Java";
   if (clean === "python3" || clean === "python" || clean === "py") return "Python3";
+  if (clean === "pythondata" || clean === "pandas") return "Pandas";
   if (clean === "cpp" || clean === "c++") return "C++";
   if (clean === "c") return "C";
   if (clean === "csharp" || clean === "c#" || clean === "cs") return "C#";
@@ -59,15 +63,18 @@ export function normalizeLanguageName(raw: string): string {
   if (clean === "racket" || clean === "rkt") return "Racket";
   if (clean === "erlang" || clean === "erl") return "Erlang";
   if (clean === "elixir" || clean === "ex") return "Elixir";
+  if (clean === "postgresql" || clean === "postgres") return "PostgreSQL";
   if (clean === "mysql") return "MySQL";
   if (clean === "mssql") return "MS SQL Server";
   if (clean === "oraclesql" || clean === "oracle") return "Oracle";
+  if (clean === "bash" || clean === "sh" || clean === "shell") return "Bash";
 
   for (const lang of KNOWN_LANGUAGES) {
     if (clean === lang.toLowerCase()) return lang;
   }
 
-  return raw.trim();
+  // Format any unlisted/future language nicely (e.g. capitalize)
+  return raw.trim().charAt(0).toUpperCase() + raw.trim().slice(1);
 }
 
 /**
