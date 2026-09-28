@@ -28,6 +28,21 @@ function getLanguageEmoji(language: string): string {
   return "💻";
 }
 
+function getDifficultyBadge(difficulty: string): string {
+  const d = difficulty.toLowerCase().trim();
+  if (d === "easy") return "🟢 **Easy**";
+  if (d === "medium") return "🟡 **Medium**";
+  if (d === "hard") return "🔴 **Hard**";
+  return `**${difficulty}**`;
+}
+
+function cleanExistingBlock(block: string): string {
+  return block
+    .replace(/^---\s*$/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 function formatSolutionSection(
   submission: LeetCodeSubmission,
   aiResult: AIAnalysisResult | undefined,
@@ -40,27 +55,30 @@ function formatSolutionSection(
     submission.language.charAt(0).toUpperCase() + submission.language.slice(1);
   const approachTitle = version > 1 ? `${langDisplay} — Approach ${version}` : langDisplay;
 
-  let body = `### ${emoji} ${approachTitle} (\`${filename}\`)\n\n- **Synchronized:** ${formattedDate}\n\n`;
+  let body = `### ${emoji} ${approachTitle} (\`${filename}\`)\n\n`;
+  body += `- **Synchronized:** ${formattedDate}\n`;
+  body += `- **Language:** \`${langDisplay}\`\n`;
+  body += `- **Source File:** [\`${filename}\`](${filename})\n\n`;
 
   if (aiResult) {
     if (aiResult.error) {
-      body += `#### Complexity\n\n> ⚠️ *Complexity analysis unavailable (${aiResult.error}).*\n`;
+      body += `#### ⏱️ Complexity Analysis\n\n> ⚠️ *Complexity analysis unavailable (${aiResult.error}).*\n`;
     } else {
       if (aiResult.approach && aiResult.approach.trim().length > 0) {
-        body += `#### Approach & Intuition\n\n> ${aiResult.approach.trim()}\n\n`;
+        body += `#### 💡 Approach & Intuition\n\n> ${aiResult.approach.trim()}\n\n`;
       }
 
       const timeText = aiResult.timeReason
-        ? `\`${aiResult.timeComplexity}\` — ${aiResult.timeReason}`
+        ? `\`${aiResult.timeComplexity}\` — *${aiResult.timeReason}*`
         : `\`${aiResult.timeComplexity}\``;
       const spaceText = aiResult.spaceReason
-        ? `\`${aiResult.spaceComplexity}\` — ${aiResult.spaceReason}`
+        ? `\`${aiResult.spaceComplexity}\` — *${aiResult.spaceReason}*`
         : `\`${aiResult.spaceComplexity}\``;
 
-      body += `#### Complexity\n\n- **Time Complexity:** ${timeText}\n- **Space Complexity:** ${spaceText}\n`;
+      body += `#### ⏱️ Complexity Analysis\n\n- **Time Complexity:** ${timeText}\n- **Space Complexity:** ${spaceText}\n`;
     }
   } else {
-    body += `#### Complexity\n\n> Time: Not provided  \n> Space: Not provided\n`;
+    body += `#### ⏱️ Complexity Analysis\n\n> Time: Not provided  \n> Space: Not provided\n`;
   }
 
   return body.trim();
@@ -93,7 +111,8 @@ export function generateReadme(
     formattedDate
   );
 
-  const header = `# ${submission.title}\n\n**Difficulty:** ${submission.difficulty}\n\n## Problem\n\n[LeetCode — ${submission.title}](${submission.url})\n\n## Solutions\n`;
+  const diffBadge = getDifficultyBadge(submission.difficulty);
+  const header = `# ${submission.title}\n\n**Difficulty:** ${diffBadge}  \n**LeetCode Link:** [${submission.title}](${submission.url})\n\n---\n\n## Solutions\n`;
 
   if (!existing || existing.length === 0) {
     return `${header}\n${currentSection}\n`;
@@ -103,15 +122,16 @@ export function generateReadme(
   const existingSections: { key: string; content: string }[] = [];
 
   if (existing.includes("### ")) {
-    const rawBlocks = existing.split(/(?=### )/g);
+    // Split cleanly on markdown ### section headers
+    const rawBlocks = existing.split(/(?=^###\s+)/gm);
     for (const rawBlock of rawBlocks) {
-      const trimmed = rawBlock.trim();
-      if (!trimmed.startsWith("### ")) continue;
+      const cleaned = cleanExistingBlock(rawBlock);
+      if (!cleaned.startsWith("### ")) continue;
 
       // Extract filename identifier like `solution.py` or `solution_2.py`
-      const fileMatch = trimmed.match(/`([^`]+\.[a-zA-Z0-9]+)`/);
-      const key = fileMatch ? fileMatch[1] : trimmed.split("\n")[0];
-      existingSections.push({ key, content: trimmed });
+      const fileMatch = cleaned.match(/`([^`]+\.[a-zA-Z0-9]+)`/);
+      const key = fileMatch ? fileMatch[1] : cleaned.split("\n")[0];
+      existingSections.push({ key, content: cleaned });
     }
   } else if (existing.includes("## Approach & Intuition") || existing.includes("## Complexity")) {
     // Legacy single-solution format migration
@@ -121,15 +141,17 @@ export function generateReadme(
     const legacyFile = `solution.${submission.language.toLowerCase().includes("python") ? "py" : "txt"}`;
 
     let legacyBody = `### ${legacyEmoji} ${legacyLang} (\`${legacyFile}\`)\n\n`;
+    legacyBody += `- **Language:** \`${legacyLang}\`\n`;
+    legacyBody += `- **Source File:** [\`${legacyFile}\`](${legacyFile})\n\n`;
 
     const approachMatch = existing.match(/## Approach & Intuition\s*\n\s*>([^\n\r]+)/i);
     if (approachMatch?.[1]) {
-      legacyBody += `#### Approach & Intuition\n\n>${approachMatch[1]}\n\n`;
+      legacyBody += `#### 💡 Approach & Intuition\n\n>${approachMatch[1]}\n\n`;
     }
 
     const complexityMatch = existing.match(/## Complexity\s*\n\s*([\s\S]+?)(?:\n---|\n##|$)/i);
     if (complexityMatch?.[1]) {
-      legacyBody += `#### Complexity\n\n${complexityMatch[1].trim()}\n\n`;
+      legacyBody += `#### ⏱️ Complexity Analysis\n\n${complexityMatch[1].trim()}\n\n`;
     }
 
     existingSections.push({ key: legacyFile, content: legacyBody.trim() });
