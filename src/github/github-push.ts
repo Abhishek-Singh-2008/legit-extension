@@ -12,6 +12,7 @@ import { logger } from "@/utils/logger";
 import { GitHubApiClientImpl } from "@/github/github-api";
 import { getFilePaths } from "@/github/github-repository";
 import { generateReadme, formatCommitMessage } from "@/github/github-file";
+import { languageToExtension } from "@/utils/slugify";
 import { analyzeComplexity } from "@/ai/ai-client";
 import {
   ConfigurationError,
@@ -95,17 +96,18 @@ export async function pushSubmissionToGitHub(
   const folderFormat = settings.folderFormat ?? "{slug}";
   const normalizedNewCode = normalizeCode(submission.code);
 
-  // ── Target Solution Path Resolution (Option A: Clean update per language) ───
-  const targetPaths = getFilePaths(submission, baseDir, folderFormat);
-  const targetPath = targetPaths.solutionPath;
+  // ── Multi-Approach / Versioning Resolution ──────────────────────────────────
+  let targetVersion = 1;
+  let targetPaths = getFilePaths(submission, baseDir, folderFormat, 1);
+  let targetPath = targetPaths.solutionPath;
   const readmePath = targetPaths.readmePath;
-  let isUpdate = false;
 
   try {
-    const existingFile = await client.getFile(repo, targetPath, branch);
-    if (existingFile) {
-      const existingCode = normalizeCode(decodeBase64(existingFile.content));
-      if (existingCode === normalizedNewCode) {
+    // Check version 1 (solution.<ext>)
+    const firstFile = await client.getFile(repo, targetPath, branch);
+    if (firstFile) {
+      const firstCode = normalizeCode(decodeBase64(firstFile.content));
+      if (firstCode === normalizedNewCode) {
         logger.info(`[LCSync] Submission code identical to existing ${targetPath} — skipping push.`);
         return {
           commitUrl: `https://github.com/${repo}/blob/${branch}/${targetPath}`,
@@ -113,22 +115,50 @@ export async function pushSubmissionToGitHub(
           isDuplicate: true,
         };
       }
-      isUpdate = true;
-      logger.info(`[LCSync] Code modified for existing ${targetPath} (updating with latest comments/refactorings).`);
+
+      // Version 1 exists and has different code/approach. Find next available version slot (solution_2, solution_3...)
+      let foundSlot = false;
+      for (let v = 2; v <= 20; v++) {
+        const vPaths = getFilePaths(submission, baseDir, folderFormat, v);
+        const vFile = await client.getFile(repo, vPaths.solutionPath, branch);
+        if (!vFile) {
+          targetVersion = v;
+          targetPath = vPaths.solutionPath;
+          foundSlot = true;
+          break;
+        }
+        const vCode = normalizeCode(decodeBase64(vFile.content));
+        if (vCode === normalizedNewCode) {
+          logger.info(`[LCSync] Submission code identical to existing ${vPaths.solutionPath} — skipping push.`);
+          return {
+            commitUrl: `https://github.com/${repo}/blob/${branch}/${vPaths.solutionPath}`,
+            solutionPath: vPaths.solutionPath,
+            isDuplicate: true,
+          };
+        }
+      }
+
+      if (!foundSlot) {
+        targetVersion = 21;
+        targetPath = getFilePaths(submission, baseDir, folderFormat, targetVersion).solutionPath;
+      }
     }
   } catch (err) {
-    logger.warn("[LCSync] Error checking existing file, proceeding with normal push:", err);
+    logger.warn("[LCSync] Error checking existing version files, proceeding with default path:", err);
   }
 
   logger.info(`[LCSync] Starting GitHub sync for ${submission.title} (${submission.language})`);
   logger.info(`[LCSync] Target repository: ${repo} @ ${branch}`);
-  logger.info(`[LCSync] Target solution path: ${targetPath}`);
+  logger.info(`[LCSync] Target solution path: ${targetPath} (version ${targetVersion})`);
 
   // ── Build commit message ──────────────────────────────────────────────────
-  const defaultTemplate = isUpdate
-    ? "refactor: update {title} ({language}) solution"
-    : (settings.commitMessageFormat ?? "feat: add {title} solution");
-  const commitMessage = formatCommitMessage(defaultTemplate, submission);
+  let commitMessage = formatCommitMessage(
+    settings.commitMessageFormat ?? "feat: add {title} solution",
+    submission
+  );
+  if (targetVersion > 1) {
+    commitMessage = `${commitMessage} (v${targetVersion} approach)`;
+  }
 
   try {
     // ── Launch AI complexity analysis concurrently with solution upload ─────
@@ -182,8 +212,24 @@ export async function pushSubmissionToGitHub(
         logger.warn(`[LCSync] AI analysis notice: ${aiResult.error}`);
       }
 
-      const readmeContent = generateReadme(submission, aiResult);
-      const readmeMessage = `docs: add README for ${submission.title}`;
+      // Fetch existing README if present to preserve multi-approach / multi-language history
+      let existingReadmeContent: string | undefined = undefined;
+      try {
+        const existingReadmeFile = await client.getFile(repo, readmePath, branch);
+        if (existingReadmeFile?.content) {
+          existingReadmeContent = decodeBase64(existingReadmeFile.content);
+        }
+      } catch (err) {
+        logger.debug("[LCSync] No existing README found, creating new one:", err);
+      }
+
+      const filename = targetPath.split("/").pop() ?? `solution.${languageToExtension(submission.language)}`;
+      const readmeContent = generateReadme(submission, aiResult, {
+        filename,
+        version: targetVersion,
+        existingContent: existingReadmeContent,
+      });
+      const readmeMessage = `docs: update README for ${submission.title} (${filename})`;
 
       // Push README with fresh SHA and conflict retry
       await safePutFile(client, repo, readmePath, readmeContent, readmeMessage, branch);

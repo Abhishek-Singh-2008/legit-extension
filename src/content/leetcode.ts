@@ -11,7 +11,7 @@ import { slugFromUrl } from "@/utils/slugify";
 import { getCurrentProblem } from "@/content/problem-detector";
 import { watchSubmissionResult } from "@/content/submission-detector";
 import { fetchAcceptedCode, fetchQuestionDifficulty } from "@/content/leetcode-api";
-import { MonacoCodeExtractor, getCurrentLanguage } from "@/content/code-extractor";
+import { MonacoCodeExtractor, getCurrentLanguage, extractCodeSafely } from "@/content/code-extractor";
 import type { LeetCodeProblem, LeetCodeSubmission, SubmissionStatus } from "@/types/leetcode";
 
 logger.info("LeetCode GitHub Sync content script loaded.");
@@ -110,7 +110,7 @@ function sendProblemDetected(problem: LeetCodeProblem | null): void {
 let isHandlingAccepted = false;
 
 watchSubmissionResult({
-  onAccepted: async (status: SubmissionStatus) => {
+  onAccepted: async (status: SubmissionStatus, metadata?: { staleSubmissionId?: string }) => {
     if (isHandlingAccepted) {
       logger.debug("[Content] Already processing an Accepted submission — skipping duplicate callback.");
       return;
@@ -132,19 +132,54 @@ watchSubmissionResult({
 
       logger.info(`[LCSync] Accepted: ${problem.title} (${problem.difficulty})`);
       
-      // 1. Try direct Monaco editor / DOM extraction for real-time code and comments
-      const monacoExtractor = new MonacoCodeExtractor();
-      let code = monacoExtractor.canExtract() ? monacoExtractor.extractCode() : null;
-      let language = getCurrentLanguage();
+      // Extract active editor code & language as primary ground truth from page
+      const editorData = extractCodeSafely();
+      let code: string | null = editorData.code;
+      let language = editorData.language;
 
-      // 2. Fallback to LeetCode GraphQL API if editor extraction is empty
+      // Check URL for a submission ID (ignore if it's the stale ID from before clicking Submit)
+      const currentUrlSubId = location.pathname.match(/\/submissions\/(\d+)/)?.[1];
+      const freshUrlSubmissionId =
+        currentUrlSubId && currentUrlSubId !== metadata?.staleSubmissionId
+          ? currentUrlSubId
+          : undefined;
+
+      logger.info(
+        `[LCSync] Fetching code from LeetCode GraphQL API (submissionId: ${
+          freshUrlSubmissionId ?? "latest"
+        }, staleId: ${metadata?.staleSubmissionId ?? "none"})...`
+      );
+
+      try {
+        const result = await fetchAcceptedCode(problem.slug, freshUrlSubmissionId, metadata?.staleSubmissionId);
+        if (result?.code && result.code.trim().length > 0) {
+          // If editor has code and detected a specific language (e.g. Java) but GraphQL returned a different language (e.g. stale Python),
+          // prioritize editor code to prevent stale overwrite
+          if (
+            editorData.code &&
+            editorData.language &&
+            result.language &&
+            editorData.language.toLowerCase() !== result.language.toLowerCase()
+          ) {
+            logger.warn(
+              `[LCSync] GraphQL returned language ${result.language} but editor has ${editorData.language}. Using editor code to prevent stale overwrite.`
+            );
+          } else {
+            code = result.code;
+            if (result.language) language = result.language;
+            logger.info(`[LCSync] Pristine code fetched via LeetCode GraphQL API (${code.length} chars, ${language})`);
+          }
+        }
+      } catch (gqlErr) {
+        logger.warn("[LCSync] GraphQL code fetch failed, falling back to editor extractor:", gqlErr);
+      }
+
+      // Fallback: Monaco editor / DOM extraction if GraphQL was unavailable
       if (!code || code.trim().length === 0) {
-        const urlSubmissionId = location.pathname.match(/\/submissions\/(\d+)/)?.[1];
-        logger.info(`[LCSync] Fetching code from LeetCode GraphQL API (submissionId: ${urlSubmissionId ?? "latest"})...`);
-        const result = await fetchAcceptedCode(problem.slug, urlSubmissionId);
-        if (result?.code) {
-          code = result.code;
-          language = result.language;
+        const monacoExtractor = new MonacoCodeExtractor();
+        if (monacoExtractor.canExtract()) {
+          code = monacoExtractor.extractCode();
+          language = getCurrentLanguage();
         }
       }
 
@@ -153,7 +188,7 @@ watchSubmissionResult({
         return;
       }
 
-      logger.info(`[LCSync] Code extracted successfully (${code.length} chars, ${language})`);
+      logger.info(`[LCSync] Final code ready for push (${code.length} chars, ${language})`);
 
       // Construct full submission payload
       const submission: LeetCodeSubmission = {

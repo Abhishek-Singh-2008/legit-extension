@@ -6,6 +6,7 @@
 // cookie, which Chrome automatically attaches because we're on leetcode.com.
 
 import { logger } from "@/utils/logger";
+import { normalizeLanguageName } from "@/content/code-extractor";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -220,9 +221,10 @@ export async function fetchSubmissionDetail(
       return null;
     }
 
+    const rawLang = detail.lang?.verboseName ?? detail.lang?.name ?? langName;
     return {
       code: detail.code,
-      language: detail.lang?.verboseName ?? detail.lang?.name ?? langName,
+      language: normalizeLanguageName(rawLang),
       submissionId,
     };
   } catch (err) {
@@ -237,13 +239,14 @@ export async function fetchSubmissionDetail(
  */
 export async function fetchAcceptedCode(
   slug: string,
-  submissionId?: string
+  submissionId?: string,
+  staleSubmissionId?: string
 ): Promise<{
   code: string;
   language: string;
 } | null> {
-  // If specific submissionId is known (e.g. from URL /submissions/<id>/), fetch directly
-  if (submissionId && /^\d+$/.test(submissionId)) {
+  // If specific submissionId is known and is NOT the stale pre-submit ID, fetch directly
+  if (submissionId && /^\d+$/.test(submissionId) && submissionId !== staleSubmissionId) {
     const detail = await fetchSubmissionDetail(submissionId);
     if (detail?.code) {
       return { code: detail.code, language: detail.language };
@@ -259,7 +262,19 @@ export async function fetchAcceptedCode(
   // Brief delay to let LeetCode record the submission server-side
   await new Promise((res) => setTimeout(res, 1500));
 
-  const detail = await fetchLatestAcceptedSubmission(slug, username);
+  let detail = await fetchLatestAcceptedSubmission(slug, username);
+  
+  // If the returned submission matches the stale ID from prior submission, wait and retry once
+  if (detail && staleSubmissionId && detail.submissionId === staleSubmissionId) {
+    logger.info("[LeetCodeAPI] Latest submission matched stale ID, waiting 2s for backend propagation...");
+    await new Promise((res) => setTimeout(res, 2000));
+    detail = await fetchLatestAcceptedSubmission(slug, username);
+    if (detail && detail.submissionId === staleSubmissionId) {
+      logger.warn("[LeetCodeAPI] Latest submission still matched stale ID after retry.");
+      return null;
+    }
+  }
+
   if (!detail) {
     return null;
   }
