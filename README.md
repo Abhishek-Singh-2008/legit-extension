@@ -6,7 +6,7 @@ A privacy-first, multi-user Chrome Extension that automatically synchronizes acc
 ![TypeScript](https://img.shields.io/badge/TypeScript-blue)
 ![Vite](https://img.shields.io/badge/Vite-purple)
 ![License](https://img.shields.io/badge/License-MIT-green)
-[![Chrome Web Store](https://img.shields.io/badge/Chrome_Web_Store-v1.0.3-brightgreen?logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/ehjenhfhnkojhpljcdohihpjpngfljpo)
+[![Chrome Web Store](https://img.shields.io/badge/Chrome_Web_Store-v1.0.4-brightgreen?logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/ehjenhfhnkojhpljcdohihpjpngfljpo)
 
 > 🚀 **Official Release**: **Legit - LeetCode to GitHub Sync** is publicly available on the [Chrome Web Store](https://chromewebstore.google.com/detail/ehjenhfhnkojhpljcdohihpjpngfljpo). Install it with a single click!
 
@@ -16,7 +16,7 @@ A privacy-first, multi-user Chrome Extension that automatically synchronizes acc
 
 | Area | Status |
 |---|---|
-| Core extension & real-time sync | ✅ Ready (v1.0.3) |
+| Core extension & real-time sync | ✅ Ready (v1.0.4) |
 | Multi-Approach & Multi-Language Versioning | ✅ Ready (`solution.py`, `solution_2.py`, `solution.java`...) |
 | Multi-Solution Preserving `README.md` | ✅ Ready (Dedicated per-approach intuition & complexity) |
 | Universal Language Coverage (25+ Languages) | ✅ Ready (Python, Java, C++, Rust, Go, Pandas, SQL...) |
@@ -24,7 +24,7 @@ A privacy-first, multi-user Chrome Extension that automatically synchronizes acc
 | Multi-Provider AI Complexity Analysis | ✅ Ready (Gemini, Groq, OpenAI, Anthropic, OpenRouter) |
 | LeetCode GraphQL accuracy & Monaco DOM extraction | ✅ Ready |
 | Sync history & local analytics dashboard | ✅ Ready |
-| Chrome Web Store | 🚀 v1.0.3 Ready |
+| Chrome Web Store | 🚀 v1.0.4 Ready |
 
 ---
 
@@ -290,7 +290,7 @@ npm run build
 
 # 5. Package distribution ZIPs (Web Store ready)
 npm run package
-# Outputs: legit-chrome-webstore-v1.0.3.zip & legit-v1.0.3.zip
+# Outputs: legit-chrome-webstore-v1.0.4.zip & legit-v1.0.4.zip
 ```
 
 ### Loading Unpacked Extension in Chrome (Development Mode)
